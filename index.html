@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="description" content="Live bitcoin price, market signals and interactive charts: halving cycles, power law, valuation, returns, drawdowns, volatility and the network." />
+<title>BTC Graph</title>
+<link rel="icon" href="assets/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/site.css" />
+<script src="data/btc-data.js"></script>
+<script src="data/btc-daily.js"></script>
+<script src="assets/core.js"></script>
+<style>
+  .hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:end}
+  @media (max-width:900px){.hero{grid-template-columns:1fr;gap:18px}}
+  .rangestats{display:grid;grid-template-columns:repeat(3,auto);gap:4px 28px;font-size:12.5px;color:var(--muted)}
+  .rangestats b{display:block;font-family:var(--mono);font-size:15px;font-weight:500;color:var(--ink);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  @media (max-width:900px){.rangestats{grid-template-columns:repeat(3,1fr)}}
+  /* price chart */
+  .pchart{margin-top:24px;padding:16px 18px 10px}
+  .pchart .head{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .pchart .chgline{font-size:13px;color:var(--muted);min-height:20px}
+  .pchart .chgline b{font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r-sm);padding:2px;gap:2px;max-width:100%;overflow-x:auto;scrollbar-width:none}
+  .seg::-webkit-scrollbar{display:none}
+  .seg button{font:inherit;font-family:var(--mono);font-size:12px;border:0;background:transparent;color:var(--muted);border-radius:4px;padding:4px 9px;cursor:pointer;white-space:nowrap;transition:color .15s,background .15s}
+  .seg button:hover{color:var(--ink)}
+  .seg button[aria-pressed="true"]{background:var(--surface2);color:var(--ink)}
+  .seg button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .pc{position:relative;height:280px;touch-action:pan-y}
+  @media (max-width:640px){.pc{height:220px}}
+  .pc svg{position:absolute;inset:0;width:100%;height:100%}
+  .pc .state{position:absolute;inset:0;display:grid;place-items:center;font-size:13px;color:var(--muted);pointer-events:none}
+  .pc .tooltip{min-width:0}
+  .tileshead{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;justify-content:space-between;margin-top:32px}
+  .tileshead h2{font-size:15px;font-weight:600;letter-spacing:-.015em;margin:0}
+  .tileshead span{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .tileshead + .tiles{margin-top:12px}
+  .bigprice{font-family:var(--mono);font-size:clamp(40px,7.5vw,68px);font-weight:500;letter-spacing:-.045em;line-height:1;margin:0 0 14px;font-variant-numeric:tabular-nums;transition:color .6s}
+  .bigprice.flash-up{color:var(--up)} .bigprice.flash-down{color:var(--down)}
+  .herosub{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:13px;color:var(--muted)}
+  .herosub b{color:var(--ink2);font-family:var(--mono);font-weight:400}
+  .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px}
+  @media (max-width:1080px){.gallery{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:640px){.gallery{grid-template-columns:1fr}}
+  a.chartcard{display:flex;flex-direction:column;text-decoration:none;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;transition:border-color .2s}
+  a.chartcard:hover{border-color:var(--line2)}
+  a.chartcard:hover .thumb svg{transform:scale(1.025)}
+  .chartcard .thumb{background:var(--surface2);border-bottom:1px solid var(--line);padding:14px 14px 8px;aspect-ratio:16/8;overflow:hidden}
+  .chartcard .thumb svg{height:100%;transition:transform .4s cubic-bezier(.2,.7,.2,1)}
+  .chartcard .body{padding:14px 16px 16px;display:flex;flex-direction:column;flex:1}
+  .chartcard h2{font-size:15px;font-weight:600;letter-spacing:-.015em;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  .chartcard p{margin:0;color:var(--muted);font-size:13.5px;flex:1}
+  .chartcard .meta{margin-top:12px;font-size:12px;font-family:var(--mono);color:var(--muted);display:flex;justify-content:space-between}
+  .chartcard .meta::after{content:"→";color:var(--ink2);transition:transform .2s}
+  a.chartcard:hover .meta::after{transform:translateX(3px)}
+  .chartcard .badge{font-family:var(--mono);font-size:10px;font-weight:400;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  .sectionh{display:flex;align-items:baseline;justify-content:space-between;margin-top:44px}
+  .sectionh h2{font-size:18px;font-weight:600;letter-spacing:-.02em;margin:0}
+  .sectionh span{font-size:12.5px;color:var(--muted)}
+  .spark{height:120px}
+  .signals{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:12px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  @media (max-width:980px){.signals{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:560px){.signals{grid-template-columns:1fr}}
+  a.signal{display:flex;flex-direction:column;background:var(--surface);padding:16px 18px 14px;text-decoration:none;color:inherit;min-width:0;transition:background .15s}
+  a.signal:hover{background:color-mix(in srgb,var(--surface2) 55%,var(--surface))}
+  .signal .k{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+  .signal .k::after{content:"→";color:var(--muted);transition:transform .2s}
+  a.signal:hover .k::after{transform:translateX(3px);color:var(--ink)}
+  .signal .v{font-family:var(--mono);font-size:clamp(19px,2.2vw,22px);font-weight:500;letter-spacing:-.02em;margin:6px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+  .signal p{margin:10px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5}
+  .signal .meter.fill{overflow:hidden}
+  .signal .meter.fill b{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:3px}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="hero">
+    <div>
+      <p class="eyebrow">Bitcoin · BTC-USD</p>
+      <div class="bigprice" id="bigPrice">—</div>
+      <div class="herosub">
+        <span>24h <b id="h24">—</b></span>
+        <span>Sats per dollar <b id="sats">—</b></span>
+        <span id="srcLine">Connecting…</span>
+      </div>
+    </div>
+    <div class="rangestats" aria-live="polite">
+      <span>High · <span class="rlbl">1M</span><b id="rHigh">—</b></span>
+      <span>Low · <span class="rlbl">1M</span><b id="rLow">—</b></span>
+      <span>Change · <span class="rlbl">1M</span><b id="rChg">—</b></span>
+    </div>
+  </section>
+
+  <section class="card pchart" aria-label="Bitcoin price chart">
+    <div class="head">
+      <div class="chgline" id="chgLine">&nbsp;</div>
+      <div class="seg" role="group" aria-label="Time range" id="seg"></div>
+    </div>
+    <div class="pc" id="pc">
+      <div class="state" id="pcState">Loading…</div>
+      <div class="tooltip" id="pcTip" role="status"></div>
+    </div>
+  </section>
+
+  <div class="tileshead"><h2>Market signals</h2><span>Where today sits in bitcoin's own history</span></div>
+  <section class="signals" id="signals" aria-label="Market signals"></section>
+
+  <div class="tileshead"><h2>Key numbers</h2><span id="lastUpdated">Last updated on —</span></div>
+  <section class="tiles" aria-label="Key numbers">
+    <div class="tile"><div class="k">Block height</div><div class="v" id="tHeight">—</div><div class="s" id="tHeightS">mempool.space</div></div>
+    <div class="tile"><div class="k">Next halving</div><div class="v" id="tHalv">—</div><div class="s" id="tHalvS">—</div><div class="bar"><b id="tHalvBar" style="width:0"></b></div></div>
+    <div class="tile"><div class="k">Supply mined</div><div class="v" id="tSupply">—</div><div class="s" id="tSupplyS">of 21,000,000 BTC</div><div class="bar"><b id="tSupplyBar" style="width:0"></b></div></div>
+    <div class="tile"><div class="k">Fees · next block</div><div class="v" id="tFee">—</div><div class="s" id="tFeeS">sat/vB</div></div>
+    <div class="tile"><div class="k">Market value</div><div class="v" id="tCap">—</div><div class="s" id="tCapS">price × coins mined</div></div>
+    <div class="tile"><div class="k">New coins per day</div><div class="v" id="tIss">—</div><div class="s" id="tIssS">—</div></div>
+    <div class="tile"><div class="k">All-time high</div><div class="v" id="tAth">—</div><div class="s" id="tAthS">—</div></div>
+    <div class="tile"><div class="k">Difficulty adjustment</div><div class="v" id="tDiff">—</div><div class="s" id="tDiffS">—</div></div>
+  </section>
+
+  <div class="sectionh"><h2>Charts</h2><span>Click any chart to explore</span></div>
+  <section class="gallery" id="gallery"></section>
+</main>
+<script>
+(function(){
+  var D=BTC.data, fmtUSD=BTC.fmtUSD;
+  var HEX={c2012:"var(--c2012)",c2016:"var(--c2016)",c2020:"var(--c2020)",c2024:"var(--c2024)",accent:"var(--accent)"};
+
+  /* ---------- hero price ---------- */
+  var prev=null, bp=document.getElementById("bigPrice");
+  BTC.onPrice(function(s){
+    bp.textContent=fmtUSD(s.price,2);
+    if(prev!=null && s.price!==prev){
+      bp.classList.remove("flash-up","flash-down"); void bp.offsetWidth;
+      bp.classList.add(s.price>prev?"flash-up":"flash-down");
+      setTimeout(function(){ bp.classList.remove("flash-up","flash-down"); },250);
+    }
+    prev=s.price;
+    if(s.open24){ var ch=(s.price/s.open24-1)*100, el=document.getElementById("h24"); el.textContent=BTC.fmtPct(ch,2); el.className="chg "+(ch>=0?"up":"down"); }
+    document.getElementById("sats").textContent=Math.round(1e8/s.price).toLocaleString("en-US");
+    document.getElementById("srcLine").textContent=s.live?"Live · "+s.src:"Snapshot · "+D.latest.date;
+    tilesFromPrice(s.price);
+    if(s.live) stamp();
+  });
+
+  /* ---------- price-derived tiles ---------- */
+  var height=null, DS=null;
+  function tilesFromPrice(price){
+    if(height!=null){
+      var sup=BTC.supplyAt(height), sub=BTC.subsidyAt(height), perDay=144*sub;
+      document.getElementById("tCap").textContent="$"+BTC.fmtCompact(price*sup);
+      document.getElementById("tCapS").textContent=fmtUSD(price)+" × "+(sup/1e6).toFixed(2)+"M coins";
+      document.getElementById("tIss").textContent=perDay.toLocaleString("en-US")+" BTC";
+      document.getElementById("tIssS").textContent="≈ $"+BTC.fmtCompact(perDay*price)+" a day · supply grows "+(perDay*365.25/sup*100).toFixed(2)+"% a year";
+    }
+    if(DS){
+      var ath=0, at=0; for(var i=0;i<DS.p.length;i++) if(DS.p[i]>ath){ ath=DS.p[i]; at=DS.t[i]; }
+      document.getElementById("tAth").textContent=fmtUSD(Math.max(ath,price));
+      document.getElementById("tAthS").textContent=price>=ath?"A new high, right now":"Daily close · "+BTC.fmtDay(at)+" · now "+((price/ath-1)*100).toFixed(0)+"%";
+    }
+    signals(price);
+  }
+
+  /* ---------- market signals: one meter per chart page ---------- */
+  var sigAt=0;
+  function signals(price,force){
+    if(!DS || (!force && Date.now()-sigAt<8000)) return;
+    sigAt=Date.now();
+    var S=BTC.withLive(DS), p=S.p, t=S.t, n=p.length, DAY=BTC.DAY, i;
+    function num(a,b){ return a-b; }
+    function clamp(x){ return Math.max(2,Math.min(98,x)); }
+    function card(href,k,v,pos,l0,l1,text,kind){
+      return '<a class="signal" href="'+href+'"><div class="k">'+k+'</div><div class="v">'+v+'</div>'+
+        '<div class="meter '+(kind||"")+'" aria-hidden="true">'+(kind==="fill"?'<b style="width:'+clamp(pos).toFixed(1)+'%"></b>':'')+'<i style="left:'+clamp(pos).toFixed(1)+'%"></i></div>'+
+        '<div class="meterlab"><span>'+l0+'</span><span>'+l1+'</span></div><p>'+text+'</p></a>';
+    }
+    /* cycle */
+    var h4=Date.parse("2024-04-19T00:00:00Z"), mo=Math.floor((Date.now()-h4)/(30.44*DAY));
+    var prog=height!=null?(height%210000)/2100:(Date.now()-h4)/(1461*DAY)*100;
+    var html=card("cycles.html","Halving cycle","Month "+mo,prog,"2024 halving","next halving",Math.round(prog)+"% of the way to the next halving. Past cycles peaked 12 to 18 months in and bottomed 26 to 30 months in.","fill");
+    /* trend */
+    var pl=BTC.powerLaw(), fair=pl.fair(Date.now()), z=pl.z(Date.now(),price), off=(price/fair-1)*100;
+    html+=card("power-law.html","Long-run trend",(price/fair).toFixed(2)+"× trend",(z+2.5)/5*100,"far below","far above","Price is "+Math.abs(off).toFixed(0)+"% "+(off>=0?"above":"below")+" its power-law trend value of "+fmtUSD(fair)+".","zones");
+    /* valuation */
+    var ma=BTC.sma(p,200), mm=[]; for(i=199;i<n;i++) mm.push(p[i]/ma[i]);
+    var m=mm[mm.length-1], rank=BTC.rankPct(mm.slice().sort(num),m);
+    html+=card("valuation.html","Against its 200-day average",m.toFixed(2)+"×",rank,"cheap","expensive",(m<1?"Below":"Above")+" its 200-day average of "+fmtUSD(ma[n-1])+". The ratio was lower on "+Math.round(rank)+"% of days.","zones");
+    /* drawdown */
+    var ath=0, at=0, worst=0; for(i=0;i<n;i++){ if(p[i]>ath){ ath=p[i]; at=t[i]; } worst=Math.min(worst,p[i]/ath-1); }
+    var dd=price/ath-1;
+    html+=card("drawdown.html","Below the all-time high",dd>-0.0005?"At the high":(dd*100).toFixed(1)+"%",dd/worst*100,"at the high","deepest ever "+(worst*100).toFixed(0)+"%",dd>-0.0005?"Bitcoin is setting a new all-time high.":"The high was "+fmtUSD(ath)+" on "+BTC.fmtDay(at)+". A return to it would be a "+((ath/price-1)*100).toFixed(0)+"% gain.","fill");
+    /* volatility: completed days only */
+    var r=[], v30=[]; for(i=1;i<DS.p.length;i++) r.push(DS.p[i]/DS.p[i-1]-1);
+    var sm=0, sq=0; for(i=0;i<r.length;i++){ sm+=r[i]; sq+=r[i]*r[i]; if(i>=30){ sm-=r[i-30]; sq-=r[i-30]*r[i-30]; } if(i>=29) v30.push(Math.sqrt(Math.max(0,(sq-sm*sm/30)/29))*100); }
+    var vol=v30[v30.length-1], vr=BTC.rankPct(v30.slice().sort(num),vol);
+    html+=card("volatility.html","Typical daily swing","±"+vol.toFixed(1)+"%",vr,"calm","wild","Over the past 30 days. Calmer than "+Math.round(100-vr)+"% of bitcoin's history.");
+    /* seasonality */
+    var M=BTC.monthlyLive(), cur=M[M.length-1], mon=cur.date.slice(5), rets=[];
+    for(i=1;i<M.length-1;i++) if(M[i].date.slice(5)===mon) rets.push(M[i].usd/M[i-1].usd-1);
+    var ups=rets.filter(function(x){ return x>0; }).length, med=BTC.quantile(rets.slice().sort(num),.5), sofar=(cur.usd/M[M.length-2].usd-1)*100, name=["January","February","March","April","May","June","July","August","September","October","November","December"][+mon-1];
+    html+=card("heatmap.html",name+" in past years",ups+" of "+rets.length+" up",ups/rets.length*100,"always down","always up",name+" closed higher in "+ups+" of "+rets.length+" years, with a typical change of "+BTC.fmtPct(med*100,0)+". This month so far: "+BTC.fmtPct(sofar,1)+".");
+    document.getElementById("signals").innerHTML=html;
+  }
+  BTC.daily(function(d){ DS=d; tilesFromPrice(BTC.price()); signals(BTC.price(),true); });
+
+  /* ---------- network tiles ---------- */
+  function network(){
+    BTC.mempool("/blocks/tip/height").then(function(h){
+      document.getElementById("tHeight").textContent=h.toLocaleString("en-US"); height=h; tilesFromPrice(BTC.price());
+      var next=(Math.floor(h/210000)+1)*210000, left=next-h, done=(h%210000)/210000*100;
+      var eta=new Date(Date.now()+left*600e3);
+      document.getElementById("tHalv").textContent=Math.round(left*600/86400)+" days";
+      document.getElementById("tHalvS").textContent=left.toLocaleString("en-US")+" blocks · ≈ "+BTC.fmtDate(eta);
+      document.getElementById("tHalvBar").style.width=done.toFixed(1)+"%";
+      var sup=BTC.supplyAt(h);
+      document.getElementById("tSupply").textContent=(sup/21e6*100).toFixed(3)+"%";
+      document.getElementById("tSupplyS").textContent=Math.round(sup).toLocaleString("en-US")+" of 21,000,000 BTC";
+      document.getElementById("tSupplyBar").style.width=(sup/21e6*100)+"%";
+      stamp();
+    }).catch(function(){ document.getElementById("tHeightS").textContent="Network data unavailable"; });
+    BTC.mempool("/v1/fees/recommended").then(function(f){
+      document.getElementById("tFee").textContent=f.fastestFee+" sat/vB";
+      document.getElementById("tFeeS").textContent="30 min "+f.halfHourFee+" · 1 hr "+f.hourFee+" · economy "+f.economyFee;
+    }).catch(function(){});
+    BTC.mempool("/v1/difficulty-adjustment").then(function(d){
+      var el=document.getElementById("tDiff");
+      el.textContent=BTC.fmtPct(d.difficultyChange,2); el.className="v chg "+(d.difficultyChange>=0?"up":"down");
+      document.getElementById("tDiffS").textContent="estimate · in "+d.remainingBlocks+" blocks ("+BTC.fmtDate(new Date(d.estimatedRetargetDate))+")";
+    }).catch(function(){});
+  }
+  network(); setInterval(network,60000);
+
+  /* ---------- price chart with selectable range ----------
+     1M and longer read the static closes in data/btc-daily.js (rebuilt once a day after the
+     00:00 UTC close); 1D and 1W are mostly today, so they fetch Coinbase candles live.
+     Every range ends at the live price. */
+  var DAY=864e5;
+  var RANGES=[
+    {id:"1D", src:"live",  gran:300,   start:function(n){ return n-DAY; }},
+    {id:"1W", src:"live",  gran:3600,  start:function(n){ return n-7*DAY; }},
+    {id:"1M", src:"h6",    gran:21600, start:function(n){ var d=new Date(n); d.setMonth(d.getMonth()-1); return +d; }},
+    {id:"3M", src:"daily", gran:86400, start:function(n){ var d=new Date(n); d.setMonth(d.getMonth()-3); return +d; }},
+    {id:"6M", src:"daily", gran:86400, start:function(n){ var d=new Date(n); d.setMonth(d.getMonth()-6); return +d; }},
+    {id:"YTD",src:"daily", gran:86400, start:function(n){ return Date.UTC(new Date(n).getUTCFullYear(),0,1); }},
+    {id:"1Y", src:"daily", gran:86400, start:function(n){ var d=new Date(n); d.setFullYear(d.getFullYear()-1); return +d; }},
+    {id:"2Y", src:"daily", gran:86400, start:function(n){ var d=new Date(n); d.setFullYear(d.getFullYear()-2); return +d; }},
+    {id:"5Y", src:"daily", gran:86400, start:function(n){ var d=new Date(n); d.setFullYear(d.getFullYear()-5); return +d; }}
+  ];
+  var cache={}, range=null, series=null, livePrice=null, hoverI=null;
+
+  /* Coinbase candles, completed buckets only, as {t (ms), p}; at most 300 per request, so paged */
+  function fetchCandles(gran,start){
+    var now=Date.now(), step=299*gran*1000, reqs=[];
+    for(var s=start;s<now;s+=step){
+      var url="https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity="+gran+
+        "&start="+new Date(s).toISOString()+"&end="+new Date(Math.min(now,s+step)).toISOString();
+      reqs.push(fetch(url).then(function(res){ if(!res.ok) throw new Error(res.status); return res.json(); }));
+    }
+    return Promise.all(reqs).then(function(pages){
+      var seen={}, pts=[];
+      pages.forEach(function(rows){ rows.forEach(function(c){ if(!seen[c[0]] && c[0]*1000>=start){ seen[c[0]]=1; pts.push({t:c[0]*1000, p:c[4]}); } }); });
+      return pts.sort(function(a,b){ return a.t-b.t; });
+    });
+  }
+
+  /* static series from the daily file, expanded to {t (ms, bucket start), p} */
+  var STATIC={};
+  function staticSeries(src){
+    if(STATIC[src]) return STATIC[src];
+    var F=window.BTC_DAILY; if(!F) return null;
+    var s=src==="daily"?F.daily:F.h6, t0=src==="daily"?Date.parse(s.start+"T00:00:00Z"):s.start*1000, g=(src==="daily"?86400:21600)*1000;
+    STATIC[src]={gran:g, pts:s.closes.map(function(p,i){ return {t:t0+i*g, p:p}; })};
+    return STATIC[src];
+  }
+  /* The file lands a few minutes after each 00:00 UTC close (and a cached copy can be older).
+     If completed buckets are missing at the end, fetch just those, once per page view. */
+  var toppedUp={};
+  function topUp(src){
+    var S=staticSeries(src), last=S.pts[S.pts.length-1].t;
+    if(toppedUp[src] || last+2*S.gran>Date.now()) return Promise.resolve(S.pts);
+    toppedUp[src]=true;
+    return fetchCandles(S.gran/1000,last+S.gran).then(function(extra){
+      extra.forEach(function(q){ if(q.t>S.pts[S.pts.length-1].t) S.pts.push(q); });
+      return S.pts;
+    }).catch(function(){ return S.pts; });
+  }
+
+  /* if the daily file is missing, 3M and up fall back to the stored monthly closes */
+  function fallback(r){
+    if(r.src!=="daily") return null;
+    var st=r.start(Date.now());
+    var pts=BTC.monthlyLive().map(function(m){ return {t:m.partial?Date.now():BTC.monthEnd(m.date), p:m.usd}; }).filter(function(q){ return q.t>=st; });
+    return pts.length>1?pts:null;
+  }
+  function load(r){
+    var st=r.start(Date.now());
+    if(r.src!=="live"){
+      if(!staticSeries(r.src)) return Promise.reject(new Error("no daily file"));
+      /* include the bucket that contains the range start, so the line begins at the left edge */
+      return topUp(r.src).then(function(all){ return all.filter(function(q){ return q.t>st-r.gran*1000; }); });
+    }
+    var c=cache[r.id];
+    if(c && Date.now()-c.at<60e3) return Promise.resolve(c.pts);
+    return fetchCandles(r.gran,st).then(function(pts){ cache[r.id]={at:Date.now(),pts:pts}; return pts; });
+  }
+  function select(id){
+    range=RANGES.filter(function(r){ return r.id===id; })[0]||RANGES[2];
+    BTC.store("btcgraph.range",range.id);
+    Array.prototype.forEach.call(document.querySelectorAll("#seg button"),function(b){ b.setAttribute("aria-pressed",b.dataset.r===range.id); });
+    Array.prototype.forEach.call(document.querySelectorAll(".rlbl"),function(s){ s.textContent=range.id; });
+    var r=range, st=document.getElementById("pcState");
+    if(r.src==="live" && !cache[r.id]){ st.textContent="Loading…"; st.style.display=""; }
+    load(r).then(function(pts){
+      if(range!==r) return;
+      series=pts; st.style.display="none"; draw();
+    }).catch(function(){
+      if(range!==r) return;
+      var fb=fallback(r);
+      if(fb){ series=fb; st.style.display="none"; draw(); document.getElementById("chgLine").insertAdjacentHTML("beforeend"," · <span>monthly closes (daily data unavailable)</span>"); }
+      else { series=null; document.querySelector("#pc svg") && document.querySelector("#pc svg").remove(); st.textContent="Couldn't load "+r.id+" prices from Coinbase. Try again shortly."; st.style.display=""; }
+    });
+  }
+  document.getElementById("seg").innerHTML=RANGES.map(function(r){ return '<button type="button" data-r="'+r.id+'" aria-pressed="false">'+r.id+'</button>'; }).join("");
+  document.getElementById("seg").addEventListener("click",function(e){ var b=e.target.closest("button"); if(b) select(b.dataset.r); });
+
+  /* the newest point follows the live price */
+  function pts(){
+    if(!series) return null;
+    var out=series.slice();
+    if(livePrice!=null && out.length){
+      var last=out[out.length-1], now=Date.now();
+      if(now-last.t<range.gran*1000) out[out.length-1]={t:last.t,p:livePrice,live:true};
+      else out.push({t:now,p:livePrice,live:true});
+    }
+    return out;
+  }
+  /* intraday candles show local time; daily candles are UTC days, so label them by their UTC date */
+  function fmtAxis(t){
+    var d=new Date(t), utc=range.gran>=86400 && Date.now()-t>DAY;
+    var M=BTC.MONTHS[utc?d.getUTCMonth():d.getMonth()], day=utc?d.getUTCDate():d.getDate(), yr=utc?d.getUTCFullYear():d.getFullYear();
+    if(range.id==="1D") return d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+    if(range.id==="2Y"||range.id==="5Y") return M+" "+yr;
+    return M+" "+day;
+  }
+  function fmtTip(t,live){
+    var d=new Date(t);
+    if(live) return "Now · "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+    if(range.gran<86400) return d.toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
+    return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric",timeZone:"UTC"});
+  }
+  function setChg(from,to,label){
+    var ch=(to/from-1)*100, el=document.getElementById("chgLine");
+    el.innerHTML='<b class="chg '+(ch>=0?"up":"down")+'">'+(to>=from?"+":"−")+fmtUSD(Math.abs(to-from))+' ('+BTC.fmtPct(ch,2)+')</b> '+label;
+  }
+  function draw(){
+    var P=pts(), box=document.getElementById("pc");
+    if(!P || P.length<2) return;
+    var W=box.clientWidth, H=box.clientHeight, ML=8, MR=64, MT=10, MB=26, PW=W-ML-MR, PH=H-MT-MB;
+    if(PW<40 || PH<40) return;   /* hidden or not laid out yet; the resize observer redraws later */
+    var lo=Infinity, hi=-Infinity, loI=0, hiI=0;
+    P.forEach(function(q,i){ if(q.p<lo){lo=q.p;loI=i;} if(q.p>hi){hi=q.p;hiI=i;} });
+    var pad=(hi-lo)*.08||hi*.01, y0=lo-pad, y1=hi+pad, t0=P[0].t, t1=P[P.length-1].t;
+    function X(t){ return ML+(t-t0)/(t1-t0)*PW; } function Y(v){ return MT+(1-(v-y0)/(y1-y0))*PH; }
+    var first=P[0].p, last=P[P.length-1].p, up=last>=first, col=up?"var(--up)":"var(--down)";
+    var s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Bitcoin price, '+range.id+' range, from '+fmtUSD(first)+' to '+fmtUSD(last)+'">';
+    s+='<defs><linearGradient id="pcg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+col+'" stop-opacity=".20"/><stop offset="1" stop-color="'+col+'" stop-opacity="0"/></linearGradient></defs>';
+    BTC.niceTicks(y0,y1,4).forEach(function(g){
+      if(g<y0||g>y1) return;
+      s+='<line class="grid" x1="'+ML+'" y1="'+Y(g)+'" x2="'+(ML+PW)+'" y2="'+Y(g)+'"/>';
+      s+='<text class="tick" x="'+(W-4)+'" y="'+(Y(g)+4)+'" text-anchor="end">'+fmtUSD(g)+'</text>';
+    });
+    var nx=Math.max(2,Math.min(6,Math.floor(PW/110)));
+    for(var k=0;k<=nx;k++){
+      var t=t0+(t1-t0)*k/nx, anchor=k===0?"start":k===nx?"end":"middle";
+      s+='<text class="tick" x="'+X(t)+'" y="'+(H-6)+'" text-anchor="'+anchor+'">'+fmtAxis(t)+'</text>';
+    }
+    /* opening-price reference line */
+    s+='<line x1="'+ML+'" y1="'+Y(first)+'" x2="'+(ML+PW)+'" y2="'+Y(first)+'" stroke="var(--muted)" stroke-dasharray="2 4" opacity=".5"/>';
+    var d=P.map(function(q,i){ return (i?"L":"M")+X(q.t).toFixed(1)+" "+Y(q.p).toFixed(1); }).join(" ");
+    s+='<path d="'+d+' L'+X(t1).toFixed(1)+' '+(MT+PH)+' L'+X(t0).toFixed(1)+' '+(MT+PH)+' Z" fill="url(#pcg)"/>';
+    s+='<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>';
+    s+='<circle cx="'+X(t1)+'" cy="'+Y(last)+'" r="3.5" fill="'+col+'" stroke="var(--surface)" stroke-width="2"/>';
+    s+='<g id="pcFocus"></g><rect id="pcHz" x="'+ML+'" y="0" width="'+PW+'" height="'+H+'" fill="transparent"/></svg>';
+    var old=box.querySelector("svg"); if(old) old.remove();
+    box.insertAdjacentHTML("afterbegin",s);
+    /* range stats */
+    document.getElementById("rHigh").textContent=fmtUSD(hi);
+    document.getElementById("rLow").textContent=fmtUSD(lo);
+    var re=document.getElementById("rChg"), ch=(last/first-1)*100;
+    re.textContent=BTC.fmtPct(ch,2); re.className="chg "+(ch>=0?"up":"down");
+    /* hover */
+    function focus(i,e){
+      hoverI=i; var q=P[i];
+      document.getElementById("pcFocus").innerHTML='<line x1="'+X(q.t)+'" y1="'+MT+'" x2="'+X(q.t)+'" y2="'+(MT+PH)+'" stroke="var(--muted)" stroke-dasharray="3 3"/>'+
+        '<circle cx="'+X(q.t)+'" cy="'+Y(q.p)+'" r="5" fill="var(--surface)" stroke="'+col+'" stroke-width="2"/>';
+      var tt=document.getElementById("pcTip");
+      tt.innerHTML='<h3>'+fmtTip(q.t,q.live)+'</h3><div class="row"><span class="nm">BTC</span><span class="vv">'+fmtUSD(q.p,2)+'</span></div>';
+      if(e) BTC.placeTip(tt,box,e);
+      setChg(first,q.p,"since "+fmtTip(t0)+(q.live?"":" · to "+fmtTip(q.t)));
+    }
+    function unfocus(){ hoverI=null; document.getElementById("pcFocus").innerHTML=""; document.getElementById("pcTip").classList.remove("on"); setChg(first,last,"past "+range.id); }
+    var hz=document.getElementById("pcHz");
+    hz.addEventListener("pointermove",function(e){
+      var r=box.getBoundingClientRect(), t=t0+((e.clientX-r.left)/r.width*W-ML)/PW*(t1-t0);
+      var lo2=0, hi2=P.length-1; while(hi2-lo2>1){ var mid=(lo2+hi2)>>1; if(P[mid].t<t) lo2=mid; else hi2=mid; }
+      focus(Math.abs(P[lo2].t-t)<Math.abs(P[hi2].t-t)?lo2:hi2,e);
+    });
+    hz.addEventListener("pointerleave",unfocus);
+    unfocus();
+  }
+  var lastDraw=0;
+  BTC.onPrice(function(s){
+    if(!s.live) return;
+    livePrice=s.price;
+    if(hoverI==null && Date.now()-lastDraw>2000){ lastDraw=Date.now(); draw(); }
+  });
+  if(window.ResizeObserver) new ResizeObserver(function(){ draw(); }).observe(document.getElementById("pc"));
+  /* refresh short ranges in the background so the chart doesn't go stale */
+  setInterval(function(){ if(range && range.src==="live" && hoverI==null) select(range.id); },60e3);
+  select(BTC.store("btcgraph.range")||"1M");
+
+  /* ---------- last updated ---------- */
+  function stamp(){
+    var d=new Date();
+    document.getElementById("lastUpdated").textContent="Last updated on "+d.toLocaleString("en-US",{month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit",second:"2-digit",timeZoneName:"short"});
+  }
+
+  /* ---------- gallery thumbnails ---------- */
+  var W=320, H=160;
+  function path(pts){ return pts.map(function(p,i){ return (i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1); }).join(" "); }
+  function thumbCycles(){
+    var s="";
+    ["c2012","c2016","c2020","c2024"].forEach(function(id){
+      var pts=D.cycles[id].points.map(function(p){ return [6+p.m/46*(W-12), 8+(1-p.pct/100)*(H-16)]; });
+      s+='<path d="'+path(pts)+'" fill="none" stroke="'+HEX[id]+'" stroke-width="'+(id==="c2024"?2.6:1.8)+'" stroke-linejoin="round"/>';
+    });
+    return s;
+  }
+  function thumbPowerLaw(){
+    var pl=BTC.powerLaw(), m=D.monthly, t0=BTC.monthEnd(m[0].date), t1=Date.UTC(2030,0,1);
+    var lx0=Math.log10(BTC.daysSince(t0)), lx1=Math.log10(BTC.daysSince(t1)), ly0=1, ly1=6;
+    function X(t){ return 6+(Math.log10(BTC.daysSince(t))-lx0)/(lx1-lx0)*(W-12); }
+    function Y(v){ return 8+(1-(Math.log10(v)-ly0)/(ly1-ly0))*(H-16); }
+    var up=[],dn=[],mid=[];
+    for(var t=t0;t<=t1;t+=60*864e5){ up.push([X(t),Y(pl.band(t,2))]); dn.push([X(t),Y(pl.band(t,-2))]); mid.push([X(t),Y(pl.fair(t))]); }
+    var band=path(up)+" L"+dn.reverse().map(function(p){ return p[0].toFixed(1)+" "+p[1].toFixed(1); }).join(" L")+" Z";
+    var price=m.map(function(p){ var t=BTC.monthEnd(p.date); return [X(t),Y(p.usd)]; });
+    return '<path d="'+band+'" fill="var(--accent)" fill-opacity=".12"/><path d="'+path(mid)+'" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="4 3"/><path d="'+path(price)+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>';
+  }
+  function thumbHeatmap(){
+    var m=D.monthly, map={}, years=[];
+    for(var i=1;i<m.length;i++){ var y=m[i].date.slice(0,4); map[m[i].date]=(m[i].usd/m[i-1].usd-1)*100; if(years.indexOf(y)<0) years.push(y); }
+    var cw=(W-12)/12, ch=(H-12)/years.length, s="";
+    years.forEach(function(y,r){
+      for(var c=0;c<12;c++){
+        var k=y+"-"+String(c+1).padStart(2,"0"), v=map[k]; if(v==null) continue;
+        var a=Math.min(1,Math.abs(v)/40);
+        s+='<rect x="'+(6+c*cw+1)+'" y="'+(6+r*ch+1)+'" width="'+(cw-2)+'" height="'+(ch-2)+'" rx="2" fill="'+(v>=0?"var(--up)":"var(--down)")+'" fill-opacity="'+(0.12+a*.8).toFixed(2)+'"/>';
+      }
+    });
+    return s;
+  }
+  function thumbDrawdown(){
+    var m=D.monthly, ath=0, pts=[];
+    m.forEach(function(p,i){ ath=Math.max(ath,p.usd); pts.push([6+i/(m.length-1)*(W-12), 8+((1-p.usd/ath))*(H-16)]); });
+    return '<path d="M6 8 '+path(pts).replace(/^M/,"L")+' L'+(W-6)+' 8 Z" fill="var(--down)" fill-opacity=".18"/><path d="'+path(pts)+'" fill="none" stroke="var(--down)" stroke-width="1.6" stroke-linejoin="round"/><line x1="6" y1="8" x2="'+(W-6)+'" y2="8" stroke="var(--muted)" stroke-width="1"/>';
+  }
+  function thumbSupply(){
+    var pts=[], hmax=1470000;
+    for(var h=0;h<=hmax;h+=10000) pts.push([6+h/hmax*(W-12), 8+(1-BTC.supplyAt(h)/21e6)*(H-16)]);
+    var s='<path d="'+path(pts)+' L'+(W-6)+' '+(H-8)+' L6 '+(H-8)+' Z" fill="var(--accent)" fill-opacity=".12"/><path d="'+path(pts)+'" fill="none" stroke="var(--accent)" stroke-width="2"/>';
+    [210000,420000,630000,840000,1050000,1260000].forEach(function(h){ var x=6+h/hmax*(W-12); s+='<line x1="'+x+'" y1="8" x2="'+x+'" y2="'+(H-8)+'" stroke="var(--muted)" stroke-dasharray="3 3" stroke-width="1" opacity=".5"/>'; });
+    return s;
+  }
+  var DC=window.BTC_DAILY.daily.closes;
+  function thumbValuation(){
+    var n=DC.length, i0=n-1461, ma=BTC.sma(DC,200), hi=0, a=[], b=[];
+    for(var i=i0;i<n;i++) hi=Math.max(hi,DC[i]);
+    for(i=i0;i<n;i+=5){ var x=6+(i-i0)/(n-1-i0)*(W-12); a.push([x,8+(1-DC[i]/hi)*(H-16)]); b.push([x,8+(1-ma[i]/hi)*(H-16)]); }
+    return '<path d="'+path(b)+'" fill="none" stroke="var(--c2012)" stroke-width="1.8"/><path d="'+path(a)+'" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linejoin="round"/>';
+  }
+  function thumbHolding(){
+    var wins=[1,30,91,183,365,730,1096,1461], n=DC.length, bw=(W-12)/wins.length, s="";
+    wins.forEach(function(w,k){
+      var up=0, tot=0; for(var i=0;i+w<n;i+=3){ tot++; if(DC[i+w]>DC[i]) up++; }
+      var h=(up/tot-.4)/.6*(H-20);
+      s+='<rect x="'+(6+k*bw+4)+'" y="'+(H-8-h)+'" width="'+(bw-8)+'" height="'+h+'" rx="3" fill="var(--up)" fill-opacity="'+(.35+.5*up/tot).toFixed(2)+'"/>';
+    });
+    return s;
+  }
+  function thumbDCA(){
+    var n=DC.length, i0=n-1461, inv=0, btc=0, a=[], b=[];
+    for(var i=i0;i<n;i++){ if((i-i0)%7===0){ inv+=1; btc+=1/DC[i]; } if((i-i0)%7===0){ a.push([i,inv]); b.push([i,btc*DC[i]]); } }
+    var hi=Math.max.apply(null,b.map(function(q){ return q[1]; }));
+    function xy(q){ return [6+(q[0]-i0)/(n-1-i0)*(W-12), 8+(1-q[1]/hi)*(H-16)]; }
+    var v=b.map(xy);
+    return '<path d="'+path(v)+' L'+(W-6)+' '+(H-8)+' L6 '+(H-8)+' Z" fill="var(--accent)" fill-opacity=".12"/><path d="'+path(a.map(xy))+'" fill="none" stroke="var(--muted)" stroke-width="1.6"/><path d="'+path(v)+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>';
+  }
+  function thumbVol(){
+    var r=[], out=[], sm=0, sq=0, w=365;
+    for(var i=1;i<DC.length;i++) r.push(DC[i]/DC[i-1]-1);
+    for(i=0;i<r.length;i++){ sm+=r[i]; sq+=r[i]*r[i]; if(i>=w){ sm-=r[i-w]; sq-=r[i-w]*r[i-w]; } if(i>=w-1 && i%10===0) out.push([i,Math.sqrt((sq-sm*sm/w)/(w-1))]); }
+    var hi=Math.max.apply(null,out.map(function(q){ return q[1]; })), n=r.length;
+    var v=out.map(function(q){ return [6+(q[0]-w)/(n-w)*(W-12), 8+(1-q[1]/hi)*(H-16)]; });
+    return '<path d="'+path(v)+' L'+v[v.length-1][0].toFixed(1)+' '+(H-8)+' L6 '+(H-8)+' Z" fill="var(--c2016)" fill-opacity=".12"/><path d="'+path(v)+'" fill="none" stroke="var(--c2016)" stroke-width="2" stroke-linejoin="round"/>';
+  }
+  var CARDS=[
+    {href:"cycles.html", title:"Halving cycles, overlaid", badge:"Live", desc:"Every cycle aligned by months since its halving, scaled to its own range, with a median path from prior cycles.", draw:thumbCycles, meta:function(){ var c=D.cycles.c2024; return "2024 cycle · month "+c.points[c.points.length-1].m; }},
+    {href:"power-law.html", title:"Power-law corridor", badge:"Live", desc:"Price against time on log–log axes. Bitcoin's long-run trend is close to a straight line; the bands show how far it strays.", draw:thumbPowerLaw, meta:function(){ var pl=BTC.powerLaw(); return "price ∝ days^"+pl.b.toFixed(2); }},
+    {href:"valuation.html", title:"Cheap or expensive?", badge:"Live", desc:"Price against its 200-day and 200-week averages, how rare today's level is, and what happened a year after similar levels.", draw:thumbValuation, meta:function(){ var m=BTC.sma(DC,200); return "Now "+(D.latest.usd/m[m.length-1]).toFixed(2)+"× its 200-day average"; }},
+    {href:"heatmap.html", title:"Monthly returns heatmap", badge:"Monthly", desc:"Every month since 2012 as a colored cell. Spot seasonality, the best and worst months, and how each year added up.", draw:thumbHeatmap, meta:function(){ return D.monthly.length-1+" months"; }},
+    {href:"holding.html", title:"Does patience pay?", badge:"Daily", desc:"Every possible start day, checked: how often a hold of a week, a year or four years ended in profit.", draw:thumbHolding, meta:function(){ return DC.length.toLocaleString("en-US")+" start days tested"; }},
+    {href:"dca.html", title:"DCA simulator", badge:"Interactive", desc:"Set an amount and a schedule to see what steady buying would be worth today, and how it handled starting at a top.", draw:thumbDCA, meta:function(){ return "Daily · weekly · monthly"; }},
+    {href:"drawdown.html", title:"Drawdowns from all-time high", badge:"Live", desc:"How far below its record high bitcoin has traded on every day, how deep each fall went and how long the recovery took.", draw:thumbDrawdown, meta:function(){ return "4 bear markets"; }},
+    {href:"volatility.html", title:"How wild is the ride?", badge:"Daily", desc:"The typical daily swing, year by year. Bitcoin's moves have been shrinking as the market has grown.", draw:thumbVol, meta:function(){ return "Since 2012"; }},
+    {href:"network.html", title:"Network & supply clock", badge:"Live", desc:"The issuance schedule toward 21 million, the next halving countdown, hashrate and the latest blocks.", draw:thumbSupply, meta:function(){ return "Subsidy 3.125 BTC / block"; }}
+  ];
+  document.getElementById("gallery").innerHTML=CARDS.map(function(c){
+    return '<a class="chartcard" href="'+c.href+'"><div class="thumb"><svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true">'+c.draw()+'</svg></div>'+
+      '<div class="body"><h2>'+c.title+'<span class="badge">'+c.badge+'</span></h2><p>'+c.desc+'</p><div class="meta">'+c.meta()+'</div></div></a>';
+  }).join("");
+})();
+</script>
+</body>
+</html>

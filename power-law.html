@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<title>Power Law · BTC Graph</title>
+<link rel="icon" href="assets/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/site.css" />
+<script src="data/btc-data.js"></script>
+<script src="assets/core.js"></script>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">Long-run trend · updates live</p>
+  <h1>The power-law corridor</h1>
+  <p class="lede">Plot bitcoin's price against the number of days since the genesis block, with <strong>both axes on a log scale</strong>, and fourteen years of monthly closes fall close to a straight line. The dashed line is the best fit through every month-end close; the shaded bands are one and two standard deviations either side.</p>
+  <span class="formula" id="formula">price = 10^a × days^b</span>
+
+  <section class="tiles" aria-label="Model readout">
+    <div class="tile"><div class="k">Price now</div><div class="v" id="kPrice">—</div><div class="s" id="kPriceS">—</div></div>
+    <div class="tile"><div class="k">Trend value today</div><div class="v" id="kFair">—</div><div class="s" id="kFairS">—</div></div>
+    <div class="tile"><div class="k">Deviation</div><div class="v" id="kZ">—</div><div class="s" id="kZS">—</div></div>
+    <div class="tile"><div class="k">Fit quality</div><div class="v" id="kR2">—</div><div class="s" id="kR2S">—</div></div>
+  </section>
+
+  <section class="card" aria-label="Power-law chart">
+    <div class="controls" role="group" aria-label="Chart controls">
+      <span class="lbl">Time axis</span>
+      <button type="button" class="toggle" id="axLog" aria-pressed="true">Log (days since genesis)</button>
+      <button type="button" class="toggle" id="axLin" aria-pressed="false">Linear (calendar)</button>
+      <span class="lbl sp">Extend to</span>
+      <button type="button" class="toggle ext" data-y="2028" aria-pressed="false">2028</button>
+      <button type="button" class="toggle ext" data-y="2032" aria-pressed="true">2032</button>
+      <button type="button" class="toggle ext" data-y="2040" aria-pressed="false">2040</button>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--accent)"></i>Monthly close</span>
+      <span><i style="background:none;border-top:2px dashed var(--muted);height:0"></i>Power-law trend</span>
+      <span><i class="band" style="background:var(--accent);opacity:.28"></i>±1σ</span>
+      <span><i class="band" style="background:var(--accent);opacity:.12"></i>±2σ</span>
+    </div>
+    <div class="chartbox" id="box"><div id="chart"></div><div class="tooltip" id="tip" role="status"></div></div>
+    <p class="readout" id="readout">Hover the chart to read the trend and the deviation at any date.</p>
+  </section>
+
+  <section class="card" aria-label="Trend projections">
+    <h2>Where the trend line goes</h2>
+    <p class="sub">The fitted line evaluated on future dates. This is arithmetic on a curve fitted to the past, not a forecast: the model has no mechanism that forces price back to it.</p>
+    <div class="twrap"><table id="proj"></table></div>
+  </section>
+
+  <footer class="notes">
+    <h2>Method</h2>
+    <p><strong>Fit:</strong> ordinary least squares of log₁₀(price) on log₁₀(days since Jan 3, 2009), over every month-end close from November 2012. Each close is dated to the last day of its month. σ is the standard deviation of the residuals in log₁₀ units, so +1σ means the price is 10^σ times the trend.</p>
+    <p><strong>Caveat:</strong> the fit is refreshed whenever the monthly history updates, so the line itself moves slightly over time. Power-law fits are sensitive to the start date; excluding pre-2012 data (as here) gives a slightly shallower slope than fits that start in 2010.</p>
+  </footer>
+</main>
+<script>
+(function(){
+  var D=BTC.data, pl=BTC.powerLaw(), fmtUSD=BTC.fmtUSD;
+  /* drawn at the card's real pixel width so text stays readable on a phone */
+  var W=960,H=520,ML=70,MR=24,MT=20,MB=44,PW=W-ML-MR,PH=H-MT-MB,nar=false;
+  function size(){
+    W=Math.max(300,document.getElementById("box").clientWidth||960); nar=W<560;
+    H=Math.round(Math.min(520,Math.max(320,W*.54))); ML=nar?46:64; MR=nar?10:24; MB=nar?40:44;
+    PW=W-ML-MR; PH=H-MT-MB;
+  }
+  var logX=true, endYear=2032, livePrice=D.latest.usd;
+  var T0=Date.UTC(2012,0,1);
+  var LY0=1, LY1=7;   /* $10 .. $10M */
+
+  function tEnd(){ return Date.UTC(endYear,0,1); }
+  function X(t){
+    if(logX){ var a=Math.log10(BTC.daysSince(T0)), b=Math.log10(BTC.daysSince(tEnd())); return ML+(Math.log10(BTC.daysSince(t))-a)/(b-a)*PW; }
+    return ML+(t-T0)/(tEnd()-T0)*PW;
+  }
+  function invX(px){
+    var f=(px-ML)/PW;
+    if(logX){ var a=Math.log10(BTC.daysSince(T0)), b=Math.log10(BTC.daysSince(tEnd())); return BTC.GENESIS+Math.pow(10,a+f*(b-a))*864e5; }
+    return T0+f*(tEnd()-T0);
+  }
+  function Y(v){ return MT+(1-(Math.log10(v)-LY0)/(LY1-LY0))*PH; }
+  function pth(pts){ return pts.map(function(p,i){ return (i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1); }).join(" "); }
+  function bandPath(k1,k2){
+    var top=[],bot=[];
+    for(var t=T0;t<=tEnd();t+=30*864e5){ top.push([X(t),Y(pl.band(t,k2))]); bot.push([X(t),Y(pl.band(t,k1))]); }
+    return pth(top)+" L"+bot.reverse().map(function(p){ return p[0].toFixed(1)+" "+p[1].toFixed(1); }).join(" L")+" Z";
+  }
+  function closes(){
+    return BTC.monthlyLive().map(function(p){ return {t:p.partial?Date.now():BTC.monthEnd(p.date), usd:p.usd, date:p.date, partial:p.partial}; });
+  }
+
+  function build(){
+    size();
+    LY1=Math.ceil(Math.log10(pl.band(tEnd(),2)));
+    var s='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Log-log chart of bitcoin monthly closing prices against days since genesis, with the fitted power-law trend line and one- and two-sigma bands">';
+    for(var e=LY0;e<=LY1;e++){
+      var v=Math.pow(10,e);
+      s+='<line class="grid" x1="'+ML+'" y1="'+Y(v)+'" x2="'+(ML+PW)+'" y2="'+Y(v)+'"/>';
+      s+='<text class="tick" x="'+(ML-8)+'" y="'+(Y(v)+4)+'" text-anchor="end">$'+BTC.fmtCompact(v)+'</text>';
+    }
+    var lastLab=-1e9;
+    for(var y=2012;y<=endYear;y++){
+      var step=(endYear>2034?4:2)*(nar?2:1); if((y-2012)%step) continue;
+      var t=Date.UTC(y,0,1);
+      s+='<line class="grid" x1="'+X(t)+'" y1="'+MT+'" x2="'+X(t)+'" y2="'+(MT+PH)+'"/>';
+      if(X(t)-lastLab>=38 && X(t)<W-14){ s+='<text class="tick" x="'+X(t)+'" y="'+(MT+PH+18)+'" text-anchor="middle">'+y+'</text>'; lastLab=X(t); }
+    }
+    s+='<text class="tick" x="'+(nar?W/2:ML+PW/2)+'" y="'+(H-4)+'" text-anchor="middle">'+(logX?(nar?"Year (log scale of days since genesis)":"Calendar year, placed on a log scale of days since Jan 3, 2009"):"Calendar year")+'</text>';
+    s+='<path d="'+bandPath(-2,2)+'" fill="var(--accent)" fill-opacity=".10"/>';
+    s+='<path d="'+bandPath(-1,1)+'" fill="var(--accent)" fill-opacity=".16"/>';
+    var mid=[]; for(var t2=T0;t2<=tEnd();t2+=30*864e5) mid.push([X(t2),Y(pl.fair(t2))]);
+    s+='<path d="'+pth(mid)+'" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="6 4"/>';
+    var c=closes();
+    s+='<path d="'+pth(c.map(function(p){ return [X(p.t),Y(p.usd)]; }))+'" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"/>';
+    var last=c[c.length-1];
+    s+='<line x1="'+X(Date.now())+'" y1="'+MT+'" x2="'+X(Date.now())+'" y2="'+(MT+PH)+'" stroke="var(--muted)" stroke-dasharray="3 4" opacity=".4"/>';
+    s+='<text class="tick" x="'+(X(Date.now())+6)+'" y="'+(MT+14)+'">today</text>';
+    s+='<circle cx="'+X(last.t)+'" cy="'+Y(last.usd)+'" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>';
+    if(X(last.t)+80<=W) s+='<text class="endlabel ink halo" x="'+(X(last.t)+10)+'" y="'+(Y(last.usd)+18)+'">'+fmtUSD(last.usd)+'</text>';
+    s+='<g id="focus"></g><rect id="hz" x="'+ML+'" y="'+MT+'" width="'+PW+'" height="'+PH+'" fill="transparent"/></svg>';
+    document.getElementById("chart").innerHTML=s;
+    var hz=document.getElementById("hz");
+    hz.addEventListener("pointermove",hover);
+    hz.addEventListener("pointerleave",function(){ document.getElementById("tip").classList.remove("on"); document.getElementById("focus").innerHTML=""; });
+  }
+
+  function hover(e){
+    var svg=document.querySelector("#chart svg").getBoundingClientRect();
+    var px=(e.clientX-svg.left)/svg.width*W, t=invX(px), c=closes(), best=null;
+    c.forEach(function(p){ if(!best || Math.abs(p.t-t)<Math.abs(best.t-t)) best=p; });
+    var future=t>Date.now()+20*864e5;
+    var tt=document.getElementById("tip"), fair=pl.fair(future?t:best.t);
+    var g='<line x1="'+X(future?t:best.t)+'" y1="'+MT+'" x2="'+X(future?t:best.t)+'" y2="'+(MT+PH)+'" stroke="var(--muted)" stroke-dasharray="4 3" opacity=".7"/>';
+    g+='<circle cx="'+X(future?t:best.t)+'" cy="'+Y(fair)+'" r="5" fill="var(--surface)" stroke="var(--muted)" stroke-width="2"/>';
+    var html;
+    if(future){
+      var d=new Date(t);
+      html='<h3>'+BTC.MONTHS[d.getUTCMonth()]+' '+d.getUTCFullYear()+' · trend only</h3>'+
+        row("var(--muted)","Trend",fmtUSD(fair))+row("var(--accent)","−1σ / +1σ",fmtUSD(pl.band(t,-1))+" – "+fmtUSD(pl.band(t,1)));
+      document.getElementById("readout").innerHTML="<strong>"+BTC.MONTHS[d.getUTCMonth()]+" "+d.getUTCFullYear()+":</strong> the trend line reaches "+fmtUSD(fair)+". The ±1σ band spans "+fmtUSD(pl.band(t,-1))+" to "+fmtUSD(pl.band(t,1))+".";
+    } else {
+      var z=pl.z(best.t,best.usd);
+      g+='<circle cx="'+X(best.t)+'" cy="'+Y(best.usd)+'" r="5.5" fill="var(--surface)" stroke="var(--accent)" stroke-width="2.5"/>';
+      html='<h3>'+BTC.fmtMonth(best.date)+(best.partial?" · live":"")+'</h3>'+
+        row("var(--accent)","Close",fmtUSD(best.usd))+row("var(--muted)","Trend",fmtUSD(fair))+row("transparent","Deviation",(z>=0?"+":"")+z.toFixed(2)+"σ · "+(best.usd/fair).toFixed(2)+"×");
+      document.getElementById("readout").innerHTML="<strong>"+BTC.fmtMonth(best.date)+":</strong> closed at "+fmtUSD(best.usd)+", "+(best.usd>=fair?"above":"below")+" the trend value of "+fmtUSD(fair)+" by "+Math.abs(z).toFixed(2)+"σ ("+(best.usd/fair).toFixed(2)+"× trend).";
+    }
+    document.getElementById("focus").innerHTML=g;
+    tt.innerHTML=html;
+    BTC.placeTip(tt,document.getElementById("box"),e);
+  }
+  function row(color,name,val){ return '<div class="row"><span class="dot" style="background:'+color+'"></span><span class="nm">'+name+'</span><span class="vv">'+val+'</span></div>'; }
+
+  function tiles(){
+    var now=Date.now(), fair=pl.fair(now), z=pl.z(now,livePrice);
+    document.getElementById("kPrice").textContent=fmtUSD(livePrice);
+    document.getElementById("kFair").textContent=fmtUSD(fair);
+    document.getElementById("kFairS").textContent="1σ band "+fmtUSD(pl.band(now,-1))+" – "+fmtUSD(pl.band(now,1));
+    var zel=document.getElementById("kZ"); zel.textContent=(z>=0?"+":"")+z.toFixed(2)+"σ"; zel.className="v chg "+(z>=0?"up":"down");
+    document.getElementById("kZS").textContent="Price is "+(livePrice/fair).toFixed(2)+"× the trend value";
+    /* R² over the fitted data */
+    var ys=D.monthly.map(function(p){ return Math.log10(p.usd); }), my=ys.reduce(function(a,b){return a+b;},0)/ys.length, sst=0;
+    ys.forEach(function(y){ sst+=(y-my)*(y-my); });
+    var r2=1-(pl.sigma*pl.sigma*(ys.length-2))/sst;
+    document.getElementById("kR2").textContent="R² "+r2.toFixed(3);
+    document.getElementById("kR2S").textContent=D.monthly.length+" monthly closes · σ = "+pl.sigma.toFixed(3)+" (×"+Math.pow(10,pl.sigma).toFixed(2)+")";
+    document.getElementById("formula").textContent="price = 10^("+pl.a.toFixed(3)+") × days^"+pl.b.toFixed(3);
+  }
+  function proj(){
+    var html="<thead><tr><th>Date</th><th>−2σ</th><th>−1σ</th><th>Trend</th><th>+1σ</th><th>+2σ</th></tr></thead><tbody>";
+    for(var y=2027;y<=2034;y++){
+      var t=Date.UTC(y,0,1);
+      html+="<tr><td>Jan 1, "+y+"</td>"+[-2,-1,0,1,2].map(function(k){ return "<td>"+fmtUSD(pl.band(t,k))+"</td>"; }).join("")+"</tr>";
+    }
+    document.getElementById("proj").innerHTML=html+"</tbody>";
+  }
+
+  function setAxis(lg){ logX=lg; document.getElementById("axLog").setAttribute("aria-pressed",lg); document.getElementById("axLin").setAttribute("aria-pressed",!lg); build(); }
+  document.getElementById("axLog").onclick=function(){ setAxis(true); };
+  document.getElementById("axLin").onclick=function(){ setAxis(false); };
+  Array.prototype.forEach.call(document.querySelectorAll(".ext"),function(b){
+    b.onclick=function(){ endYear=+b.dataset.y; document.querySelectorAll(".ext").forEach(function(o){ o.setAttribute("aria-pressed",o===b); }); build(); };
+  });
+
+  var last=0;
+  BTC.onPrice(function(s){
+    livePrice=s.price; tiles();
+    document.getElementById("kPriceS").textContent=s.live?s.src:"Snapshot "+D.latest.date;
+    if(Date.now()-last>5000){ last=Date.now(); build(); }
+  });
+  proj();
+  if(window.ResizeObserver){ var lw=0; new ResizeObserver(function(){ var w=document.getElementById("box").clientWidth; if(Math.abs(w-lw)>1){ lw=w; build(); } }).observe(document.getElementById("box")); }
+})();
+</script>
+</body>
+</html>

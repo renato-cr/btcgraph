@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="description" content="Is bitcoin cheap or expensive right now? Price against its 200-day and 200-week averages, how rare today's level is, and what happened next from similar levels." />
+<title>Cheap or expensive · BTC Graph</title>
+<link rel="icon" href="assets/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/site.css" />
+<script src="data/btc-data.js"></script>
+<script src="data/btc-daily.js"></script>
+<script src="assets/core.js"></script>
+<script src="assets/charts.js"></script>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">Valuation · updates live</p>
+  <h1>Cheap or expensive?</h1>
+  <p class="lede">A price alone says little. Compare it with the <strong>200-day average</strong>, roughly what buyers paid over the past seven months, and you get one number: above 1× bitcoin costs more than its recent average, below 1× it costs less.</p>
+  <span class="formula">multiple = price ÷ average close of the last 200 days</span>
+
+  <div class="insight" id="insight"><span class="tag">Right now</span><span id="insightText">Loading…</span></div>
+  <section class="tiles" id="tiles" aria-label="Valuation summary"></section>
+
+  <section class="card" aria-label="Price and its long-term averages">
+    <div class="cardhead">
+      <div><h2>Price and its long-term averages</h2>
+      <p class="sub">The 200-week average moves slowly and has sat near the bottom of every bear market so far.</p></div>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Time range" id="rangeSeg"></div>
+        <div class="seg" role="group" aria-label="Price scale"><button type="button" id="lin" aria-pressed="true">Linear</button><button type="button" id="log" aria-pressed="false">Log</button></div>
+      </div>
+    </div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>Price</span><span><i style="background:var(--c2012)"></i>200-day average</span><span><i style="background:var(--c2020)"></i>200-week average</span></div>
+    <div id="priceChart"></div>
+  </section>
+
+  <section class="card" aria-label="The multiple over time">
+    <h2>The multiple over time</h2>
+    <p class="sub">Price divided by its 200-day average. The shaded zones mark the cheapest and priciest tenth of all days, so they move as history grows. Same time range as the chart above.</p>
+    <div id="multChart"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card" aria-label="What happened next">
+      <h2>What happened a year later</h2>
+      <p class="sub">Every day since 2013, grouped by how stretched the price was. Bars show how often bitcoin was higher one year on.</p>
+      <div class="hbars stack" id="fwd"></div>
+      <p class="note" id="fwdNote"></p>
+    </section>
+    <section class="card" aria-label="Time spent at each price">
+      <h2>Where bitcoin has spent its time</h2>
+      <p class="sub">Number of days that closed in each price range. Long bars are prices the market accepted for a long time.</p>
+      <div class="hbars" id="tap"></div>
+      <p class="note" id="tapNote"></p>
+    </section>
+  </div>
+
+  <footer class="notes">
+    <h2>Notes</h2>
+    <p>The price-to-200-day-average ratio is often called the <strong>Mayer Multiple</strong>, after Trace Mayer. Daily closes run from the first halving (Nov 28, 2012), so the 200-day average starts in mid-2013 and the 200-week average in late 2016. Today's value uses the live price.</p>
+    <p>"A year later" compares each day's close with the close 365 days on, so the most recent year isn't counted yet. Past results describe history, not what happens next.</p>
+  </footer>
+</main>
+<script>
+(function(){
+  var fmtUSD=BTC.fmtUSD, DAY=BTC.DAY, M=null, scale="lin", range=BTC.store("btcgraph.valRange")||"All";
+  var RANGES=[["All",0],["8Y",8],["4Y",4],["2Y",2],["1Y",1]];
+  function mult(v){ return v.toFixed(2)+"×"; }
+  function num(a,b){ return a-b; }
+
+  function compute(S0){
+    var S=BTC.withLive(S0), t=S.t, p=S.p, n=p.length;
+    var d200=BTC.sma(p,200), w200=BTC.sma(p,1400);
+    var mm=p.map(function(v,i){ return d200[i]?v/d200[i]:null; });
+    var sorted=mm.filter(function(v){ return v!=null; }).sort(num);
+    M={t:t,p:p,n:n,d200:d200,w200:w200,mm:mm,sorted:sorted,live:S.live,
+       p10:BTC.quantile(sorted,.1), p90:BTC.quantile(sorted,.9)};
+  }
+  function t0(){ var y=RANGES.filter(function(r){ return r[0]===range; })[0][1]; return y?M.t[M.n-1]-y*365.25*DAY:M.t[0]; }
+
+  function summary(){
+    var i=M.n-1, price=M.p[i], m=M.mm[i], cheaper=BTC.rankPct(M.sorted,m), d=M.d200[i], w=M.w200[i];
+    var above=0; for(var k=0;k<i;k++) if(M.p[k]>price) above++;
+    var rare=m<1?cheaper:100-cheaper;
+    document.getElementById("insightText").innerHTML="At "+fmtUSD(price)+", bitcoin trades at <b>"+mult(m)+"</b> its 200-day average of "+fmtUSD(d)+
+      ". It has been this "+(m<1?"cheap or cheaper":"expensive or pricier")+" against that average on <b>"+(rare<1?"fewer than 1%":Math.round(rare)+"%")+" of days</b> since 2013.";
+    function tile(k,v,s,extra){ return '<div class="tile"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div>'+(extra||"")+'</div>'; }
+    function vs(a){ var x=(price/a-1)*100; return "Price is "+Math.abs(x).toFixed(0)+"% "+(x>=0?"above":"below")+" it"; }
+    document.getElementById("tiles").innerHTML=
+      tile("Price ÷ 200-day average",mult(m),"Higher than on "+Math.round(cheaper)+"% of days",'<div class="meter zones" aria-hidden="true"><i style="left:'+Math.max(2,Math.min(98,cheaper)).toFixed(1)+'%"></i></div><div class="meterlab"><span>cheap</span><span>expensive</span></div>')+
+      tile("200-day average",fmtUSD(d),vs(d))+
+      tile("200-week average",fmtUSD(w),vs(w))+
+      tile("Days above today's price",above.toLocaleString("en-US"),(above/i*100).toFixed(1)+"% of "+i.toLocaleString("en-US")+" daily closes");
+  }
+
+  function forward(){
+    var B=[["Under 0.8×",0,.8],["0.8× – 1×",.8,1],["1× – 1.5×",1,1.5],["1.5× – 2.4×",1.5,2.4],["Over 2.4×",2.4,1e9]];
+    var now=M.mm[M.n-1], html="", best=null;
+    B.forEach(function(b){
+      var rets=[];
+      for(var i=0;i+365<M.n-(M.live?1:0);i++){ var m=M.mm[i]; if(m!=null && m>=b[1] && m<b[2]) rets.push(M.p[i+365]/M.p[i]-1); }
+      rets.sort(num);
+      var win=rets.filter(function(r){ return r>0; }).length/Math.max(1,rets.length)*100, med=BTC.quantile(rets,.5), cur=now>=b[1] && now<b[2]?" now here":"";
+      if(cur) best={label:b[0],win:win,med:med,n:rets.length};
+      html+='<span class="l'+cur+'">'+b[0]+'</span><span class="b'+cur+'"><i style="width:'+win.toFixed(1)+'%"></i></span>'+
+        '<span class="v'+cur+'">'+Math.round(win)+'% higher <small><span class="sep">· </span>median '+BTC.fmtPct(med*100,0)+'</small></span>';
+    });
+    document.getElementById("fwd").innerHTML=html;
+    document.getElementById("fwdNote").innerHTML=best?"Today sits in the <b>"+best.label.toLowerCase()+"</b> group. From the "+best.n.toLocaleString("en-US")+" past days in that group, bitcoin was higher a year later "+Math.round(best.win)+"% of the time, with a median change of "+BTC.fmtPct(best.med*100,0)+".":"";
+  }
+
+  function timeAtPrice(){
+    var price=M.p[M.n-1], done=M.n-(M.live?1:0), hi=0, i;
+    for(i=0;i<done;i++) hi=Math.max(hi,M.p[i]);
+    var step=hi>60000?10000:hi>20000?5000:2000, bins=[], top=Math.ceil(hi/step);
+    for(i=0;i<top;i++) bins.push(0);
+    for(i=0;i<done;i++) bins[Math.min(top-1,Math.floor(M.p[i]/step))]++;
+    var mx=Math.max.apply(null,bins), below=0, html="";
+    for(i=0;i<done;i++) if(M.p[i]<price) below++;
+    for(i=top-1;i>=0;i--){
+      var cur=price>=i*step && price<(i+1)*step?" now here":"";
+      html+='<span class="l'+cur+'">$'+BTC.fmtCompact(i*step)+' – $'+BTC.fmtCompact((i+1)*step)+'</span><span class="b'+cur+'"><i style="width:'+(bins[i]/mx*100).toFixed(1)+'%"></i></span>'+
+        '<span class="v'+cur+'">'+bins[i].toLocaleString("en-US")+' <small>days</small></span>';
+    }
+    document.getElementById("tap").innerHTML=html;
+    document.getElementById("tapNote").innerHTML="Bitcoin closed below today's price on <b>"+Math.round(below/done*100)+"%</b> of its "+done.toLocaleString("en-US")+" days since the first halving. More than half of all days closed under "+fmtUSD(BTC.quantile(M.p.slice(0,done).sort(num),.5))+".";
+  }
+
+  var priceCh, multCh;
+  function charts(){
+    priceCh=BTC.chart(document.getElementById("priceChart"),function(){ return {
+      label:"Line chart of bitcoin's daily price with its 200-day and 200-week moving averages",
+      t0:t0(), halvings:true, y:{scale:scale},
+      series:[
+        {name:"200-week average", t:M.t, v:M.w200, color:"var(--c2020)", width:1.6, fmt:function(v){ return fmtUSD(v); }, end:function(v){ return "$"+BTC.fmtCompact(v); }},
+        {name:"200-day average", t:M.t, v:M.d200, color:"var(--c2012)", width:1.6, fmt:function(v){ return fmtUSD(v); }, end:function(v){ return "$"+BTC.fmtCompact(v); }},
+        {name:"Price", t:M.t, v:M.p, color:"var(--accent)", width:1.9, fmt:function(v){ return fmtUSD(v); }, end:function(v){ return "$"+BTC.fmtCompact(v); }}
+      ], hoverSeries:2
+    }; });
+    multCh=BTC.chart(document.getElementById("multChart"),function(){ return {
+      label:"Line chart of bitcoin's price divided by its 200-day average, with zones for the cheapest and priciest tenth of days",
+      t0:Math.max(t0(),M.t[199]), halvings:true, height:function(W){ return Math.min(340,Math.max(230,W*.34)); },
+      y:{scale:"log", fmt:function(v){ return v+"×"; }, include:[M.p10*.9,M.p90*1.1]},
+      bands:[{y0:1e-6,y1:M.p10,color:"var(--up)",opacity:.1,label:"Cheapest 10% of days · under "+mult(M.p10),short:"Cheapest 10%"},
+             {y0:M.p90,y1:1e6,color:"var(--down)",opacity:.1,label:"Priciest 10% of days · over "+mult(M.p90),short:"Priciest 10%"}],
+      hlines:[{y:1,label:"1× = at its average"}],
+      series:[{name:"Multiple", t:M.t, v:M.mm, color:"var(--accent)", width:1.7, fmt:mult, end:mult}],
+      tipExtra:function(t){
+        var i=BTC.nearest(M.t,t);
+        return '<div class="row"><span class="nm">Price</span><span class="vv">'+fmtUSD(M.p[i])+'</span></div>'+
+          '<div class="row"><span class="nm">200-day average</span><span class="vv">'+fmtUSD(M.d200[i])+'</span></div>'+
+          '<div class="row"><span class="nm">Higher than</span><span class="vv">'+Math.round(BTC.rankPct(M.sorted,M.mm[i]))+'% of days</span></div>';
+      }
+    }; });
+  }
+
+  var seg=document.getElementById("rangeSeg");
+  seg.innerHTML=RANGES.map(function(r){ return '<button type="button" data-r="'+r[0]+'" aria-pressed="'+(r[0]===range)+'">'+r[0]+'</button>'; }).join("");
+  seg.addEventListener("click",function(e){
+    var b=e.target.closest("button"); if(!b) return;
+    range=b.dataset.r; BTC.store("btcgraph.valRange",range);
+    [].forEach.call(seg.children,function(x){ x.setAttribute("aria-pressed",x===b); });
+    priceCh.draw(); multCh.draw();
+  });
+  function setScale(sc){ scale=sc; document.getElementById("lin").setAttribute("aria-pressed",sc==="lin"); document.getElementById("log").setAttribute("aria-pressed",sc==="log"); priceCh.draw(); }
+  document.getElementById("lin").onclick=function(){ setScale("lin"); };
+  document.getElementById("log").onclick=function(){ setScale("log"); };
+
+  BTC.daily(function(S0){
+    if(!S0) return;
+    function all(){ compute(S0); summary(); forward(); timeAtPrice(); }
+    all(); charts();
+    var last=Date.now();
+    BTC.onPrice(function(st){ if(st.live && Date.now()-last>20000){ last=Date.now(); all(); } });
+    setTimeout(function(){ all(); priceCh.draw(); multCh.draw(); },2500);   /* pick up the first live tick */
+  });
+})();
+</script>
+</body>
+</html>

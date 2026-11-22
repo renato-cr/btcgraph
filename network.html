@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<title>Network &amp; Supply · BTC Graph</title>
+<link rel="icon" href="assets/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/site.css" />
+<script src="data/btc-data.js"></script>
+<script src="assets/core.js"></script>
+<style>
+  .countdown{display:flex;gap:0;flex-wrap:wrap;margin:10px 0 18px;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;width:fit-content;max-width:100%}
+  .countdown div{padding:12px 22px;min-width:96px;border-right:1px solid var(--line)}
+  .countdown div:last-child{border-right:0}
+  .countdown b{display:block;font-family:var(--mono);font-size:clamp(26px,4.6vw,38px);font-weight:500;letter-spacing:-.04em;line-height:1.1;font-variant-numeric:tabular-nums}
+  .countdown span{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  @media (max-width:520px){.countdown div{padding:10px 12px;min-width:0;flex:1}}
+  .epoch{position:relative;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden}
+  .epoch b{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:2px}
+  .epochlbl{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:8px}
+  .blocks{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 10px;scroll-snap-type:x mandatory}
+  .blk{flex:none;width:140px;scroll-snap-align:start;border-radius:8px;border:1px solid var(--line);background:var(--surface);padding:11px 12px;position:relative;overflow:hidden}
+  .blk .fill{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(to top,color-mix(in srgb,var(--accent) 14%,transparent),color-mix(in srgb,var(--accent) 4%,transparent))}
+  .blk *{position:relative}
+  .blk .h{font-family:var(--mono);font-size:12.5px;color:var(--accent)}
+  .blk .f{font-family:var(--mono);font-size:19px;font-weight:500;letter-spacing:-.03em;margin:6px 0 2px}
+  .blk .m{font-size:11.5px;color:var(--muted);line-height:1.5}
+  .blk.new{animation:drop .6s ease-out}
+  @keyframes drop{from{transform:translateY(-12px);opacity:0}to{transform:none;opacity:1}}
+  @media (prefers-reduced-motion: reduce){.blk.new{animation:none}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">Network · live from mempool.space</p>
+  <h1>Network &amp; supply clock</h1>
+  <p class="lede">Bitcoin's issuance runs on a fixed schedule: <strong>every 210,000 blocks the new-coin reward per block halves</strong>, until the total reaches just under 21 million. Blocks arrive about every ten minutes, so the schedule is measured in blocks and the calendar dates are estimates.</p>
+
+  <section class="card" aria-label="Next halving countdown">
+    <h2>Countdown to the fifth halving</h2>
+    <p class="sub" id="cdSub">Loading the chain tip…</p>
+    <div class="countdown" id="countdown" aria-live="off">
+      <div><b id="cdD">—</b><span>days</span></div><div><b id="cdH">—</b><span>hours</span></div><div><b id="cdM">—</b><span>minutes</span></div><div><b id="cdB">—</b><span>blocks left</span></div>
+    </div>
+    <div class="epoch"><b id="epochBar" style="width:0"></b></div>
+    <div class="epochlbl"><span id="epA">840,000</span><span id="epPct">—</span><span id="epB">1,050,000</span></div>
+  </section>
+
+  <section class="card" aria-label="Latest blocks">
+    <h2>Latest blocks</h2>
+    <p class="sub">The most recent blocks, newest first. Fill height shows how full each block is; the large number is the median fee paid.</p>
+    <div class="blocks" id="blocks"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card" aria-label="Supply curve">
+      <h2>Supply issued</h2>
+      <p class="sub">Coins in existence over time. The dot is today; dashed lines are halvings (future dates estimated at ten-minute blocks).</p>
+      <div class="chartbox" id="boxS"><div id="supply"></div><div class="tooltip" id="tipS" role="status"></div></div>
+    </section>
+    <section class="card" aria-label="Block subsidy">
+      <h2>Block subsidy</h2>
+      <p class="sub">New bitcoin created per block, on a log scale. Each step down is a halving.</p>
+      <div class="chartbox" id="boxR"><div id="subsidy"></div><div class="tooltip" id="tipR" role="status"></div></div>
+    </section>
+  </div>
+
+  <section class="card" aria-label="Hashrate">
+    <h2>Hashrate, past year</h2>
+    <p class="sub" id="hrSub">Daily average hashrate, estimated by mempool.space from block times and difficulty.</p>
+    <div class="chartbox" id="boxH"><div id="hash"></div><div class="tooltip" id="tipH" role="status"></div></div>
+  </section>
+
+  <footer class="notes">
+    <h2>Notes</h2>
+    <p><strong>Supply</strong> is computed from the subsidy schedule (50 BTC per block, halving every 210,000 blocks, in whole satoshis). It slightly overstates spendable coins: the genesis reward and a few miner under-claims are unspendable.</p>
+    <p><strong>Halving date estimate</strong> assumes exactly ten-minute blocks from the current tip. In practice blocks have run a little faster than that while hashrate grows, so the halving has typically arrived a few weeks early.</p>
+  </footer>
+</main>
+<script>
+(function(){
+  var fmtUSD=BTC.fmtUSD, tipHeight=null, tipTime=Date.now();
+  var PAST={0:Date.UTC(2009,0,3),210000:Date.UTC(2012,10,28),420000:Date.UTC(2016,6,9),630000:Date.UTC(2020,4,11),840000:Date.UTC(2024,3,19)};
+
+  /* block height → estimated date: interpolate between known halvings, project forward from the tip */
+  function dateOf(h){
+    if(tipHeight!=null && h>=tipHeight) return tipTime+(h-tipHeight)*600e3;
+    var ks=Object.keys(PAST).map(Number);
+    for(var i=ks.length-1;i>=0;i--) if(h>=ks[i]){
+      var a=ks[i], b=ks[i+1];
+      var tb = b!=null ? PAST[b] : tipTime, hb = b!=null ? b : tipHeight;
+      return PAST[a]+(h-a)/(hb-a)*(tb-PAST[a]);
+    }
+    return PAST[0];
+  }
+
+  /* ---------- countdown ---------- */
+  function countdown(){
+    if(tipHeight==null) return;
+    var next=(Math.floor(tipHeight/210000)+1)*210000, left=next-tipHeight;
+    var eta=tipTime+left*600e3, ms=Math.max(0,eta-Date.now());
+    document.getElementById("cdD").textContent=Math.floor(ms/864e5);
+    document.getElementById("cdH").textContent=String(Math.floor(ms/36e5)%24).padStart(2,"0");
+    document.getElementById("cdM").textContent=String(Math.floor(ms/6e4)%60).padStart(2,"0");
+    document.getElementById("cdB").textContent=left.toLocaleString("en-US");
+    var start=next-210000, done=(tipHeight-start)/210000*100;
+    document.getElementById("epochBar").style.width=done+"%";
+    document.getElementById("epA").textContent=start.toLocaleString("en-US");
+    document.getElementById("epB").textContent=next.toLocaleString("en-US");
+    document.getElementById("epPct").textContent="block "+tipHeight.toLocaleString("en-US")+" · "+done.toFixed(1)+"% of this epoch";
+    document.getElementById("cdSub").textContent="Block "+next.toLocaleString("en-US")+" is estimated for "+BTC.fmtDate(new Date(eta))+". The block reward then drops from "+BTC.subsidyAt(tipHeight)+" to "+BTC.subsidyAt(next)+" BTC.";
+  }
+  setInterval(countdown,1000);
+
+  /* ---------- latest blocks ---------- */
+  var seen={};
+  function ago(t){ var s=Math.round((Date.now()/1000-t)); if(s<60) return s+"s ago"; if(s<3600) return Math.round(s/60)+" min ago"; return Math.round(s/3600)+" h ago"; }
+  function blocks(){
+    BTC.mempool("/v1/blocks").then(function(bs){
+      tipHeight=bs[0].height; tipTime=bs[0].timestamp*1000; countdown(); charts();
+      var first=!Object.keys(seen).length;
+      document.getElementById("blocks").innerHTML=bs.slice(0,12).map(function(b){
+        var isNew=!first && !seen[b.id]; seen[b.id]=1;
+        var full=Math.min(100,b.weight/4e6*100), ex=b.extras||{};
+        return '<div class="blk'+(isNew?" new":"")+'"><div class="fill" style="height:'+full.toFixed(0)+'%"></div>'+
+          '<div class="h">'+b.height.toLocaleString("en-US")+'</div>'+
+          '<div class="f">'+(ex.medianFee!=null?ex.medianFee.toFixed(ex.medianFee<10?1:0):"—")+'<span class="m"> sat/vB</span></div>'+
+          '<div class="m">'+b.tx_count.toLocaleString("en-US")+' txs · '+full.toFixed(0)+'% full</div>'+
+          '<div class="m">'+(ex.pool&&ex.pool.name?ex.pool.name:"Unknown pool")+'</div>'+
+          '<div class="m">'+ago(b.timestamp)+'</div></div>';
+      }).join("");
+    }).catch(function(){ document.getElementById("cdSub").textContent="Couldn't reach mempool.space. Retrying shortly."; });
+  }
+  blocks(); setInterval(blocks,30000);
+
+  /* ---------- supply & subsidy ---------- */
+  var W=480,H=280,ML=54,MR=14,MT=16,MB=30,PW=W-ML-MR,PH=H-MT-MB;
+  var HMAX=1470000;
+  function charts(){
+    var t0=PAST[0], t1=dateOf(HMAX);
+    function X(t){ return ML+(t-t0)/(t1-t0)*PW; }
+    function yearTicks(){ var s=""; for(var y=2010;y<=2036;y+=4){ var t=Date.UTC(y,0,1); s+='<text class="tick" x="'+X(t)+'" y="'+(H-8)+'" text-anchor="middle">'+y+'</text>'; } return s; }
+    function halvLines(){ var s=""; for(var h=210000;h<HMAX;h+=210000) s+='<line x1="'+X(dateOf(h))+'" y1="'+MT+'" x2="'+X(dateOf(h))+'" y2="'+(MT+PH)+'" stroke="var(--muted)" stroke-dasharray="3 3" opacity=".45"/>'; return s; }
+    /* supply */
+    function Ys(v){ return MT+(1-v/21e6)*PH; }
+    var s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Bitcoin supply issued over time, approaching 21 million">';
+    [0,5e6,10e6,15e6,21e6].forEach(function(g){ s+='<line class="grid" x1="'+ML+'" y1="'+Ys(g)+'" x2="'+(ML+PW)+'" y2="'+Ys(g)+'"/><text class="tick" x="'+(ML-8)+'" y="'+(Ys(g)+4)+'" text-anchor="end">'+(g/1e6)+'M</text>'; });
+    s+=yearTicks()+halvLines();
+    var past=[], fut=[];
+    for(var h=0;h<=HMAX;h+=5000){ var pt=[X(dateOf(h)),Ys(BTC.supplyAt(h))]; (tipHeight==null||h<=tipHeight?past:fut).push(pt); }
+    if(tipHeight!=null){ var tp=[X(dateOf(tipHeight)),Ys(BTC.supplyAt(tipHeight))]; past.push(tp); fut.unshift(tp); }
+    function p(a){ return a.map(function(q,i){ return (i?"L":"M")+q[0].toFixed(1)+" "+q[1].toFixed(1); }).join(" "); }
+    s+='<path d="'+p(past)+' L'+past[past.length-1][0]+' '+(MT+PH)+' L'+ML+' '+(MT+PH)+' Z" fill="var(--accent)" fill-opacity=".12"/>';
+    s+='<path d="'+p(past)+'" fill="none" stroke="var(--accent)" stroke-width="2.2"/>';
+    if(fut.length) s+='<path d="'+p(fut)+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="2 4" opacity=".8"/>';
+    if(tipHeight!=null){
+      var sup=BTC.supplyAt(tipHeight);
+      s+='<circle cx="'+X(tipTime)+'" cy="'+Ys(sup)+'" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>';
+      s+='<text class="anno ink" x="'+(X(tipTime)+8)+'" y="'+(Ys(sup)+18)+'">Today · '+(sup/1e6).toFixed(3)+'M ('+(sup/21e6*100).toFixed(2)+'%)</text>';
+    }
+    s+='<rect id="hzS" x="'+ML+'" y="'+MT+'" width="'+PW+'" height="'+PH+'" fill="transparent"/></svg>';
+    document.getElementById("supply").innerHTML=s;
+    /* subsidy (log) */
+    function Yr(v){ var a=Math.log10(0.04), b=Math.log10(60); return MT+(1-(Math.log10(v)-a)/(b-a))*PH; }
+    var r='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Block subsidy in BTC per block, halving every 210,000 blocks, on a log scale">';
+    [50,12.5,3.125,0.78125,0.1953125,0.048828125].forEach(function(g){ r+='<line class="grid" x1="'+ML+'" y1="'+Yr(g)+'" x2="'+(ML+PW)+'" y2="'+Yr(g)+'"/><text class="tick" x="'+(ML-8)+'" y="'+(Yr(g)+4)+'" text-anchor="end">'+(+g.toPrecision(3))+'</text>'; });
+    r+=yearTicks()+halvLines();
+    var d="";
+    for(var e=0;e*210000<HMAX;e++){
+      var h0=e*210000, h1=Math.min(HMAX,(e+1)*210000), v=50/Math.pow(2,e);
+      d+=(e?"L":"M")+X(dateOf(h0)).toFixed(1)+" "+Yr(v).toFixed(1)+" L"+X(dateOf(h1)).toFixed(1)+" "+Yr(v).toFixed(1);
+    }
+    r+='<path d="'+d+'" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"/>';
+    if(tipHeight!=null){
+      var cs=BTC.subsidyAt(tipHeight);
+      r+='<circle cx="'+X(tipTime)+'" cy="'+Yr(cs)+'" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>';
+      r+='<text class="anno ink" x="'+(X(tipTime)+8)+'" y="'+(Yr(cs)-10)+'">Today · '+cs+' BTC</text>';
+    }
+    r+='<rect id="hzR" x="'+ML+'" y="'+MT+'" width="'+PW+'" height="'+PH+'" fill="transparent"/></svg>';
+    document.getElementById("subsidy").innerHTML=r;
+    /* shared hover: read by date */
+    [["hzS","supply","tipS","boxS"],["hzR","subsidy","tipR","boxR"]].forEach(function(cfg){
+      var z=document.getElementById(cfg[0]);
+      z.addEventListener("pointermove",function(ev){
+        var b=document.querySelector("#"+cfg[1]+" svg").getBoundingClientRect(), t=t0+((ev.clientX-b.left)/b.width*W-ML)/PW*(t1-t0);
+        var lo=0, hi=HMAX; for(var k=0;k<40;k++){ var mid=(lo+hi)/2; if(dateOf(mid)<t) lo=mid; else hi=mid; }
+        var h=Math.round(lo), dt=new Date(t), tt=document.getElementById(cfg[2]);
+        tt.innerHTML='<h3>'+BTC.MONTHS[dt.getUTCMonth()]+' '+dt.getUTCFullYear()+(tipHeight!=null&&h>tipHeight?" · projected":"")+'</h3>'+
+          '<div class="row"><span class="nm">Block</span><span class="vv">≈ '+h.toLocaleString("en-US")+'</span></div>'+
+          '<div class="row"><span class="nm">Supply</span><span class="vv">'+Math.round(BTC.supplyAt(h)).toLocaleString("en-US")+' BTC</span></div>'+
+          '<div class="row"><span class="nm">Subsidy</span><span class="vv">'+BTC.subsidyAt(h)+' BTC / block</span></div>';
+        BTC.placeTip(tt,document.getElementById(cfg[3]),ev);
+      });
+      z.addEventListener("pointerleave",function(){ document.getElementById(cfg[2]).classList.remove("on"); });
+    });
+  }
+  charts();
+
+  /* ---------- hashrate ---------- */
+  function hashrate(){
+    BTC.mempool("/v1/mining/hashrate/1y").then(function(j){
+      var pts=j.hashrates.map(function(h){ return {t:h.timestamp*1000, v:h.avgHashrate/1e18}; });
+      var W2=960,H2=300,L=60,R=20,T=16,B=30,PW2=W2-L-R,PH2=H2-T-B;
+      var lo=Math.min.apply(null,pts.map(function(p){return p.v;})), hi=Math.max.apply(null,pts.map(function(p){return p.v;}));
+      var ticks=BTC.niceTicks(lo*0.95,hi*1.03,5); lo=ticks[0]; hi=ticks[ticks.length-1];
+      var t0=pts[0].t, t1=pts[pts.length-1].t;
+      function X(t){ return L+(t-t0)/(t1-t0)*PW2; } function Y(v){ return T+(1-(v-lo)/(hi-lo))*PH2; }
+      /* 7-day moving average as the primary line, daily as faint context */
+      var ma=pts.map(function(p,i){ var a=pts.slice(Math.max(0,i-6),i+1); return {t:p.t,v:a.reduce(function(s,q){return s+q.v;},0)/a.length,raw:p.v}; });
+      var s='<svg viewBox="0 0 '+W2+' '+H2+'" role="img" aria-label="Bitcoin network hashrate over the past year in exahashes per second">';
+      ticks.forEach(function(g){ s+='<line class="grid" x1="'+L+'" y1="'+Y(g)+'" x2="'+(L+PW2)+'" y2="'+Y(g)+'"/><text class="tick" x="'+(L-8)+'" y="'+(Y(g)+4)+'" text-anchor="end">'+g.toLocaleString("en-US")+'</text>'; });
+      s+='<text class="ylab" x="'+L+'" y="'+(T-4)+'">EH/s</text>';
+      for(var k=0;k<12;k+=2){ var d=new Date(t0); d.setUTCMonth(d.getUTCMonth()+k+1,1); s+='<text class="tick" x="'+X(d.getTime())+'" y="'+(H2-8)+'" text-anchor="middle">'+BTC.MONTHS[d.getUTCMonth()]+' '+String(d.getUTCFullYear()).slice(2)+'</text>'; }
+      s+='<path d="'+pts.map(function(p,i){ return (i?"L":"M")+X(p.t).toFixed(1)+" "+Y(p.v).toFixed(1); }).join(" ")+'" fill="none" stroke="var(--accent)" stroke-width="1" opacity=".3"/>';
+      s+='<path d="'+ma.map(function(p,i){ return (i?"L":"M")+X(p.t).toFixed(1)+" "+Y(p.v).toFixed(1); }).join(" ")+'" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"/>';
+      var lp=ma[ma.length-1];
+      s+='<circle cx="'+X(lp.t)+'" cy="'+Y(lp.v)+'" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>';
+      s+='<g id="fH"></g><rect id="hzH" x="'+L+'" y="'+T+'" width="'+PW2+'" height="'+PH2+'" fill="transparent"/></svg>';
+      document.getElementById("hash").innerHTML=s;
+      var yoy=(lp.v/ma[6].v-1)*100;
+      document.getElementById("hrSub").innerHTML="7-day average <strong style='color:var(--ink)'>"+Math.round(lp.v).toLocaleString("en-US")+" EH/s</strong>, "+BTC.fmtPct(yoy)+" over the year. Faint line is the daily estimate from mempool.space.";
+      var z=document.getElementById("hzH");
+      z.addEventListener("pointermove",function(ev){
+        var b=document.querySelector("#hash svg").getBoundingClientRect(), px=(ev.clientX-b.left)/b.width*W2;
+        var i=Math.max(0,Math.min(ma.length-1,Math.round((px-L)/PW2*(ma.length-1)))), p=ma[i];
+        document.getElementById("fH").innerHTML='<line x1="'+X(p.t)+'" y1="'+T+'" x2="'+X(p.t)+'" y2="'+(T+PH2)+'" stroke="var(--muted)" stroke-dasharray="4 3"/><circle cx="'+X(p.t)+'" cy="'+Y(p.v)+'" r="5" fill="var(--surface)" stroke="var(--accent)" stroke-width="2.5"/>';
+        var tt=document.getElementById("tipH");
+        tt.innerHTML='<h3>'+BTC.fmtDate(new Date(p.t))+'</h3><div class="row"><span class="nm">7-day avg</span><span class="vv">'+Math.round(p.v)+' EH/s</span></div><div class="row"><span class="nm">Daily</span><span class="vv">'+Math.round(p.raw)+' EH/s</span></div>';
+        BTC.placeTip(tt,document.getElementById("boxH"),ev);
+      });
+      z.addEventListener("pointerleave",function(){ document.getElementById("tipH").classList.remove("on"); document.getElementById("fH").innerHTML=""; });
+    }).catch(function(){ document.getElementById("hrSub").textContent="Couldn't load hashrate from mempool.space."; });
+  }
+  hashrate();
+})();
+</script>
+</body>
+</html>

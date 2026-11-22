@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<title>Monthly Returns · BTC Graph</title>
+<link rel="icon" href="assets/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/site.css" />
+<script src="data/btc-data.js"></script>
+<script src="assets/core.js"></script>
+<style>
+  .hm{display:grid;grid-template-columns:52px repeat(12,minmax(44px,1fr)) 8px minmax(64px,1.2fr);gap:2px;min-width:760px;font-family:var(--mono);font-size:11.5px}
+  .hm .h{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:center;padding:2px 0 6px;text-transform:uppercase;letter-spacing:.06em}
+  .hm .yr{font-family:var(--mono);color:var(--ink2);display:flex;align-items:center;font-size:12px}
+  .hm .c{border-radius:3px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--ink2);cursor:default;position:relative;font-variant-numeric:tabular-nums;transition:outline-color .1s}
+  .hm .c.strong{color:var(--bg)}
+  .hm .c.empty{background:transparent;border:1px dashed var(--line)}
+  .hm .c.partial::after{content:"";position:absolute;inset:2px;border:1px dashed currentColor;border-radius:2px;opacity:.6}
+  .hm .c:hover,.hm .c.hl{outline:1.5px solid var(--ink);outline-offset:1px;z-index:1}
+  .hm .sum{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);display:flex;align-items:center}
+  .hm .stat{height:26px;border-radius:3px;display:flex;align-items:center;justify-content:center;background:var(--surface2);color:var(--ink2);font-size:11px}
+  .hm .sep{grid-column:1/-1;height:8px}
+  .scale{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11.5px;color:var(--muted);margin:0 0 12px;flex-wrap:wrap}
+  .scale .ramp{display:flex;gap:2px}
+  .scale .ramp span{width:22px;height:10px;border-radius:2px}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">Seasonality · current month updates live</p>
+  <h1>Monthly returns, every month since 2012</h1>
+  <p class="lede">Each cell is one month's change from the previous month-end close. <strong>Green months rose, red months fell</strong>; the stronger the color, the bigger the move. The right column is the full calendar year, and the rows underneath summarize each month across all years.</p>
+
+  <section class="card" aria-label="Monthly returns heatmap">
+    <div class="controls" role="group" aria-label="Color scale">
+      <span class="lbl">Color cap</span>
+      <button type="button" class="toggle cap" data-c="25" aria-pressed="false">±25%</button>
+      <button type="button" class="toggle cap" data-c="50" aria-pressed="true">±50%</button>
+      <button type="button" class="toggle cap" data-c="100" aria-pressed="false">±100%</button>
+      <span class="lbl sp">Show</span>
+      <button type="button" class="toggle" id="numToggle" aria-pressed="true">Values in cells</button>
+    </div>
+    <div class="scale" id="scale"></div>
+    <div class="chartbox" id="box">
+      <div class="twrap"><div class="hm" id="hm" role="table" aria-label="Monthly percentage returns by year and month"></div></div>
+      <div class="tooltip" id="tip" role="status"></div>
+    </div>
+  </section>
+
+  <section class="card" aria-label="Median return by calendar month">
+    <h2>Typical month</h2>
+    <p class="sub">The median return of each calendar month across all years, with the share of years in which that month closed higher. Medians resist the handful of +100% months that distort averages.</p>
+    <div class="chartbox" id="box2"><div id="bars"></div><div class="tooltip" id="tip2" role="status"></div></div>
+  </section>
+
+  <footer class="notes">
+    <h2>Notes</h2>
+    <p><strong>Data:</strong> month-end closes, the same series as the halving-cycles chart (Bitstamp to Aug 2014, Yahoo Finance BTC-USD after). The first return is December 2012. The current month (dashed outline) uses the live price and will change until the month closes.</p>
+    <p><strong>Year column:</strong> December close over the previous December close; the first and current years run from the first and to the latest available close.</p>
+  </footer>
+</main>
+<script>
+(function(){
+  var D=BTC.data, MONTHS=BTC.MONTHS, cap=50, showNums=true;
+  function series(){
+    var m=BTC.monthlyLive(), out={}, years=[];
+    for(var i=1;i<m.length;i++){
+      var y=m[i].date.slice(0,4), mo=+m[i].date.slice(5,7);
+      out[m[i].date]={r:(m[i].usd/m[i-1].usd-1)*100, close:m[i].usd, prev:m[i-1].usd, partial:!!m[i].partial};
+      if(years.indexOf(y)<0) years.push(y);
+    }
+    var yearly={};
+    years.forEach(function(y){
+      var first=null,last=null;
+      for(var i=0;i<m.length;i++){ var yy=m[i].date.slice(0,4); if(yy===String(+y-1) ) first=m[i]; if(yy===y){ last=m[i]; } }
+      if(!first) first=m[0];
+      yearly[y]=(last.usd/first.usd-1)*100;
+    });
+    return {cells:out, years:years, yearly:yearly};
+  }
+  function bg(r){
+    var a=Math.min(1,Math.abs(r)/cap), pct=Math.round(12+a*88);
+    return {css:"color-mix(in srgb, "+(r>=0?"var(--up)":"var(--down)")+" "+pct+"%, var(--mid))", strong:pct>58};
+  }
+  function fmt(r){ return (r>0?"+":"")+(Math.abs(r)>=100?r.toFixed(0):r.toFixed(1)); }
+
+  function build(){
+    var S=series(), html='<div class="h" role="columnheader"></div>';
+    MONTHS.forEach(function(m){ html+='<div class="h" role="columnheader">'+m+'</div>'; });
+    html+='<div></div><div class="h" role="columnheader">Year</div>';
+    S.years.forEach(function(y){
+      html+='<div class="yr" role="rowheader">'+y+'</div>';
+      for(var c=1;c<=12;c++){
+        var k=y+"-"+String(c).padStart(2,"0"), v=S.cells[k];
+        if(!v){ html+='<div class="c empty" role="cell" aria-label="'+MONTHS[c-1]+' '+y+': no data"></div>'; continue; }
+        var b=bg(v.r);
+        html+='<div class="c'+(b.strong?" strong":"")+(v.partial?" partial":"")+'" role="cell" data-k="'+k+'" data-m="'+c+'" style="background:'+b.css+'" aria-label="'+MONTHS[c-1]+' '+y+': '+fmt(v.r)+'%">'+(showNums?fmt(v.r):"")+'</div>';
+      }
+      var yb=bg(S.yearly[y]/4);
+      html+='<div></div><div class="c'+(yb.strong?" strong":"")+'" role="cell" data-y="'+y+'" style="background:'+yb.css+';font-weight:500">'+fmt(S.yearly[y])+'%</div>';
+    });
+    /* summary rows */
+    var stats=monthStats(S);
+    html+='<div class="sep"></div>';
+    [["Median",function(s){ return fmt(s.median)+"%"; }],["Mean",function(s){ return fmt(s.mean)+"%"; }],["Up yrs",function(s){ return s.up+"/"+s.n; }]].forEach(function(r){
+      html+='<div class="sum">'+r[0]+'</div>';
+      stats.forEach(function(s){ html+='<div class="stat">'+r[1](s)+'</div>'; });
+      html+='<div></div><div></div>';
+    });
+    document.getElementById("hm").innerHTML=html;
+    bars(stats);
+  }
+  function monthStats(S){
+    var out=[];
+    for(var c=1;c<=12;c++){
+      var v=[];
+      Object.keys(S.cells).forEach(function(k){ if(+k.slice(5,7)===c && !S.cells[k].partial) v.push(S.cells[k].r); });
+      v.sort(function(a,b){return a-b;});
+      var n=v.length, med=n%2?v[(n-1)/2]:(v[n/2-1]+v[n/2])/2;
+      out.push({m:c, n:n, median:med, mean:v.reduce(function(a,b){return a+b;},0)/n, up:v.filter(function(x){return x>0;}).length, best:v[n-1], worst:v[0]});
+    }
+    return out;
+  }
+  function bars(stats){
+    var W=960,H=280,ML=50,MR=10,MT=16,MB=30,PW=W-ML-MR,PH=H-MT-MB;
+    var lo=Math.min(-10,Math.min.apply(null,stats.map(function(s){return s.median;}))), hi=Math.max(10,Math.max.apply(null,stats.map(function(s){return s.median;})));
+    lo=Math.floor(lo/5)*5; hi=Math.ceil(hi/5)*5;
+    function Y(v){ return MT+(1-(v-lo)/(hi-lo))*PH; }
+    var bw=PW/12, s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Bar chart of the median monthly return for each calendar month">';
+    BTC.niceTicks(lo,hi,5).forEach(function(g){
+      s+='<line class="'+(g===0?"axis":"grid")+'" x1="'+ML+'" y1="'+Y(g)+'" x2="'+(ML+PW)+'" y2="'+Y(g)+'"/>';
+      s+='<text class="tick" x="'+(ML-8)+'" y="'+(Y(g)+4)+'" text-anchor="end">'+g+'%</text>';
+    });
+    stats.forEach(function(st,i){
+      var x=ML+i*bw+bw*.2, w=bw*.6, y0=Y(0), y1=Y(st.median), top=Math.min(y0,y1), h=Math.max(2,Math.abs(y1-y0));
+      s+='<rect x="'+x+'" y="'+top+'" width="'+w+'" height="'+h+'" rx="4" fill="'+(st.median>=0?"var(--up)":"var(--down)")+'"/>';
+      s+='<text class="tick ink" x="'+(x+w/2)+'" y="'+(st.median>=0?top-6:top+h+14)+'" text-anchor="middle" style="font-family:var(--mono);font-weight:500">'+fmt(st.median)+'%</text>';
+      s+='<text class="tick" x="'+(x+w/2)+'" y="'+(H-8)+'" text-anchor="middle">'+MONTHS[i]+'</text>';
+      s+='<rect class="bhz" data-i="'+i+'" x="'+(ML+i*bw)+'" y="'+MT+'" width="'+bw+'" height="'+PH+'" fill="transparent"/>';
+    });
+    document.getElementById("bars").innerHTML=s+"</svg>";
+    Array.prototype.forEach.call(document.querySelectorAll(".bhz"),function(r){
+      r.addEventListener("pointermove",function(e){
+        var st=stats[+r.dataset.i], tt=document.getElementById("tip2");
+        tt.innerHTML='<h3>'+MONTHS[st.m-1]+' · '+st.n+' years</h3>'+rw("Median",fmt(st.median)+"%")+rw("Mean",fmt(st.mean)+"%")+rw("Best",fmt(st.best)+"%")+rw("Worst",fmt(st.worst)+"%")+rw("Closed up",st.up+" of "+st.n);
+        BTC.placeTip(tt,document.getElementById("box2"),e);
+        hl(st.m);
+      });
+      r.addEventListener("pointerleave",function(){ document.getElementById("tip2").classList.remove("on"); hl(0); });
+    });
+  }
+  function rw(a,b){ return '<div class="row"><span class="nm">'+a+'</span><span class="vv">'+b+'</span></div>'; }
+  function hl(m){ Array.prototype.forEach.call(document.querySelectorAll(".hm .c[data-m]"),function(c){ c.classList.toggle("hl",+c.dataset.m===m); }); }
+
+  /* cell tooltip (delegated) */
+  var hmEl=document.getElementById("hm");
+  hmEl.addEventListener("pointermove",function(e){
+    var c=e.target.closest(".c[data-k],.c[data-y]"), tt=document.getElementById("tip");
+    if(!c){ tt.classList.remove("on"); return; }
+    var S=series();
+    if(c.dataset.k){
+      var v=S.cells[c.dataset.k];
+      tt.innerHTML='<h3>'+BTC.fmtMonth(c.dataset.k)+(v.partial?" · in progress":"")+'</h3>'+rw("Return",fmt(v.r)+"%")+rw("Close",BTC.fmtUSD(v.close))+rw("Prior close",BTC.fmtUSD(v.prev));
+    } else {
+      tt.innerHTML='<h3>'+c.dataset.y+' · full year</h3>'+rw("Return",fmt(S.yearly[c.dataset.y])+"%");
+    }
+    BTC.placeTip(tt,document.getElementById("box"),e);
+  });
+  hmEl.addEventListener("pointerleave",function(){ document.getElementById("tip").classList.remove("on"); });
+
+  function scale(){
+    var steps=[-1,-.66,-.33,0,.33,.66,1];
+    document.getElementById("scale").innerHTML='<span>−'+cap+'% or worse</span><span class="ramp">'+steps.map(function(f){ return '<span style="background:'+bg(f*cap).css+'"></span>'; }).join("")+'</span><span>+'+cap+'% or better</span>';
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".cap"),function(b){
+    b.onclick=function(){ cap=+b.dataset.c; document.querySelectorAll(".cap").forEach(function(o){ o.setAttribute("aria-pressed",o===b); }); scale(); build(); };
+  });
+  var nt=document.getElementById("numToggle");
+  nt.onclick=function(){ showNums=!showNums; nt.setAttribute("aria-pressed",showNums); build(); };
+
+  scale(); build();
+  var last=0;
+  BTC.onPrice(function(s){ if(s.live && Date.now()-last>15000){ last=Date.now(); build(); } });
+})();
+</script>
+</body>
+</html>

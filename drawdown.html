@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="description" content="Bitcoin drawdowns: how far below its all-time high bitcoin has traded on every day since 2012, every bear market measured, and how long each recovery took." />
+<title>Drawdowns · BTC Graph</title>
+<link rel="icon" href="assets/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/site.css" />
+<script src="data/btc-data.js"></script>
+<script src="data/btc-daily.js"></script>
+<script src="assets/core.js"></script>
+<script src="assets/charts.js"></script>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">Risk · updates live</p>
+  <h1>Drawdowns from the all-time high</h1>
+  <p class="lede">On every day, how far bitcoin sat below the <strong>highest daily close it had ever reached</strong>. Zero means a new high. Each dip under the line is a sell-off; its depth is how much someone who bought at the top was down.</p>
+  <span class="formula">drawdown = close ÷ highest close so far − 1</span>
+
+  <div class="insight"><span class="tag">Right now</span><span id="insightText">Loading…</span></div>
+  <section class="tiles" id="tiles" aria-label="Drawdown summary"></section>
+
+  <section class="card" aria-label="Drawdown chart">
+    <div class="cardhead">
+      <div><h2>Every fall from a high</h2>
+      <p class="sub">Labels mark the bottom of each fall deeper than 50%.</p></div>
+      <div class="controls"><div class="seg" role="group" aria-label="Time range" id="rangeSeg"></div></div>
+    </div>
+    <div id="ddChart"></div>
+    <p class="readout" id="readout">Hover to read the drawdown on any day.</p>
+  </section>
+
+  <section class="card" aria-label="Price and its running high">
+    <div class="cardhead">
+      <div><h2>Price and the high it has to beat</h2>
+      <p class="sub">The grey steps are the running all-time high. The gap between the two lines is the drawdown above.</p></div>
+      <div class="controls"><div class="seg" role="group" aria-label="Price scale"><button type="button" id="lin" aria-pressed="true">Linear</button><button type="button" id="log" aria-pressed="false">Log</button></div></div>
+    </div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>Price</span><span><i style="background:var(--muted)"></i>All-time high so far</span></div>
+    <div id="pxChart"></div>
+  </section>
+
+  <section class="card" aria-label="Major drawdowns table">
+    <h2>Every major drawdown</h2>
+    <p class="sub">Falls deeper than 30% from a high, on daily closes. "Recovered" is the first close back above the old high. The gain needed to recover is always bigger than the fall: a 50% drop needs a 100% rise.</p>
+    <div class="twrap"><table id="episodes"></table></div>
+  </section>
+
+  <footer class="notes">
+    <h2>Notes</h2>
+    <p>Measured on UTC daily closes since the first halving (Nov 28, 2012), so intraday spikes and wicks aren't counted. Today's value uses the live price.</p>
+  </footer>
+</main>
+<script>
+(function(){
+  var fmtUSD=BTC.fmtUSD, DAY=BTC.DAY, M=null, scale="lin", range=BTC.store("btcgraph.ddRange")||"All";
+  var RANGES=[["All",0],["8Y",8],["4Y",4],["2Y",2]];
+  function pc(v){ return v>-0.05?"0%":v.toFixed(1)+"%"; }
+  function dur(d){ return d<90?d+" days":d<730?Math.round(d/30.44)+" months":(d/365.25).toFixed(1)+" years"; }
+
+  function compute(S0){
+    var S=BTC.withLive(S0), t=S.t, p=S.p, n=p.length, ath=0, athI=0, dd=[], hi=[], hiI=[], eps=[], cur=null;
+    for(var i=0;i<n;i++){
+      if(p[i]>=ath){ if(cur){ cur.rec=i; eps.push(cur); cur=null; } ath=p[i]; athI=i; }
+      else { if(!cur) cur={peak:athI,trough:i}; if(p[i]<p[cur.trough]) cur.trough=i; }
+      dd.push((p[i]/ath-1)*100); hi.push(ath); hiI.push(athI);
+    }
+    if(cur){ cur.ongoing=true; eps.push(cur); }
+    eps.forEach(function(e){ e.depth=(p[e.trough]/p[e.peak]-1)*100; });
+    M={t:t,p:p,n:n,dd:dd,hi:hi,hiI:hiI,eps:eps.filter(function(e){ return e.depth<=-30; }),live:S.live};
+  }
+  function t0(){ var y=RANGES.filter(function(r){ return r[0]===range; })[0][1]; return y?M.t[M.n-1]-y*365.25*DAY:M.t[0]; }
+
+  function summary(){
+    var i=M.n-1, dd=M.dd[i], price=M.p[i], ath=M.hi[i], since=i-M.hiI[i];
+    var worst=M.eps.reduce(function(a,e){ return !a||e.depth<a.depth?e:a; },null);
+    var under=0, deeper=0; M.dd.forEach(function(v){ if(v<0) under++; if(v<=dd) deeper++; });
+    var longest=M.eps.reduce(function(a,e){ var d=(e.ongoing?i:e.rec)-e.peak; return d>a.d?{d:d,e:e}:a; },{d:0});
+    document.getElementById("insightText").innerHTML=dd>-0.05?"Bitcoin is at an <b>all-time high</b> of "+fmtUSD(price)+". It has spent only "+Math.round(100-under/M.n*100)+"% of its days this close to a record.":
+      "Bitcoin is <b>"+Math.abs(dd).toFixed(1)+"% below</b> its high of "+fmtUSD(ath)+", set "+dur(since)+" ago. It has been this far down or further on <b>"+Math.round(deeper/M.n*100)+"% of days</b>, and it would need to rise "+((ath/price-1)*100).toFixed(0)+"% to get back.";
+    function tile(k,v,s){ return '<div class="tile"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>'; }
+    document.getElementById("tiles").innerHTML=
+      tile("Drawdown now",pc(dd),dd<-0.05?"Needs +"+((ath/price-1)*100).toFixed(0)+"% to reclaim the high":"At an all-time high")+
+      tile("High to beat",fmtUSD(ath),"Daily close · "+BTC.fmtDay(M.t[M.hiI[i]]))+
+      tile("Deepest drawdown",worst.depth.toFixed(1)+"%",BTC.fmtDay(M.t[worst.peak])+" → "+BTC.fmtDay(M.t[worst.trough]))+
+      tile("Longest wait for a new high",dur(longest.d),"From the "+BTC.fmtMonth(new Date(M.t[longest.e.peak]).toISOString().slice(0,7))+" high"+(longest.e.ongoing?" · still waiting":""));
+  }
+
+  function table(){
+    var i=M.n-1, h='<thead><tr><th>High</th><th>Close at high</th><th>Bottom</th><th>Close at bottom</th><th>Fall</th><th>Gain needed</th><th>High → bottom</th><th>Recovered</th><th>High → recovery</th></tr></thead><tbody>';
+    M.eps.forEach(function(e){
+      var pk=M.p[e.peak], tr=M.p[e.trough];
+      h+='<tr><td>'+BTC.fmtDay(M.t[e.peak])+'</td><td>'+fmtUSD(pk,pk<1000?2:0)+'</td><td>'+BTC.fmtDay(M.t[e.trough])+'</td><td>'+fmtUSD(tr,tr<1000?2:0)+'</td>'+
+        '<td style="color:var(--down)">'+e.depth.toFixed(1)+'%</td><td>+'+((pk/tr-1)*100).toFixed(0)+'%</td><td>'+dur(e.trough-e.peak)+'</td>'+
+        '<td>'+(e.ongoing?"not yet":BTC.fmtDay(M.t[e.rec]))+'</td><td>'+(e.ongoing?dur(i-e.peak)+" so far":dur(e.rec-e.peak))+'</td></tr>';
+    });
+    document.getElementById("episodes").innerHTML=h+'</tbody>';
+  }
+  function readDefault(){ document.getElementById("readout").textContent="Hover to read the drawdown on any day."; }
+
+  var ddCh, pxCh;
+  function charts(){
+    ddCh=BTC.chart(document.getElementById("ddChart"),function(){ return {
+      label:"Area chart of bitcoin's percentage drawdown from its all-time-high daily close",
+      t0:t0(), halvings:true, y:{min:-100, max:0, fmt:function(v){ return v+"%"; }},
+      series:[{name:"Drawdown", t:M.t, v:M.dd, split:{at:0,above:"var(--down)",below:"var(--down)"}, width:1.6, fmt:pc, end:pc}],
+      marks:M.eps.filter(function(e){ return e.depth<=-50; }).map(function(e){ return {t:M.t[e.trough], v:M.dd[e.trough], color:"var(--down)", dy:18, label:e.depth.toFixed(0)+"%"+(document.getElementById("ddChart").clientWidth<560?"":" · "+BTC.fmtMonth(new Date(M.t[e.trough]).toISOString().slice(0,7)))}; }),
+      tipExtra:function(t){ var i=BTC.nearest(M.t,t);
+        return '<div class="row"><span class="nm">Close</span><span class="vv">'+fmtUSD(M.p[i])+'</span></div><div class="row"><span class="nm">High so far</span><span class="vv">'+fmtUSD(M.hi[i])+'</span></div>'; },
+      onHover:function(t){ var i=BTC.nearest(M.t,t), v=M.dd[i];
+        document.getElementById("readout").innerHTML=v>-0.05?"<strong>"+BTC.fmtDay(M.t[i])+":</strong> a new all-time-high close at "+fmtUSD(M.p[i])+".":
+          "<strong>"+BTC.fmtDay(M.t[i])+":</strong> "+fmtUSD(M.p[i])+", which is "+Math.abs(v).toFixed(1)+"% below the "+BTC.fmtDay(M.t[M.hiI[i]])+" high of "+fmtUSD(M.hi[i])+". A "+((M.hi[i]/M.p[i]-1)*100).toFixed(0)+"% rise was needed to get back."; },
+      onLeave:readDefault
+    }; });
+    pxCh=BTC.chart(document.getElementById("pxChart"),function(){ return {
+      label:"Line chart of bitcoin's daily price with its running all-time high",
+      t0:t0(), halvings:true, y:{scale:scale}, height:function(W){ return Math.min(340,Math.max(230,W*.34)); },
+      series:[{name:"High so far", t:M.t, v:M.hi, color:"var(--muted)", width:1.4, fmt:function(v){ return fmtUSD(v); }, end:function(v){ return "$"+BTC.fmtCompact(v); }},
+              {name:"Price", t:M.t, v:M.p, color:"var(--accent)", width:1.8, fmt:function(v){ return fmtUSD(v); }, end:function(v){ return "$"+BTC.fmtCompact(v); }}],
+      hoverSeries:1
+    }; });
+  }
+
+  var seg=document.getElementById("rangeSeg");
+  seg.innerHTML=RANGES.map(function(r){ return '<button type="button" data-r="'+r[0]+'" aria-pressed="'+(r[0]===range)+'">'+r[0]+'</button>'; }).join("");
+  seg.addEventListener("click",function(e){ var b=e.target.closest("button"); if(!b) return; range=b.dataset.r; BTC.store("btcgraph.ddRange",range); [].forEach.call(seg.children,function(x){ x.setAttribute("aria-pressed",x===b); }); ddCh.draw(); pxCh.draw(); });
+  function setScale(sc){ scale=sc; document.getElementById("lin").setAttribute("aria-pressed",sc==="lin"); document.getElementById("log").setAttribute("aria-pressed",sc==="log"); pxCh.draw(); }
+  document.getElementById("lin").onclick=function(){ setScale("lin"); };
+  document.getElementById("log").onclick=function(){ setScale("log"); };
+
+  BTC.daily(function(S0){
+    if(!S0) return;
+    function all(){ compute(S0); summary(); table(); }
+    all(); charts();
+    var last=Date.now();
+    BTC.onPrice(function(st){ if(st.live && Date.now()-last>20000){ last=Date.now(); all(); } });
+    setTimeout(function(){ all(); ddCh.draw(); pxCh.draw(); },2500);
+  });
+})();
+</script>
+</body>
+</html>

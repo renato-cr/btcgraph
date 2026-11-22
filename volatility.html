@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="description" content="Bitcoin volatility in plain terms: how much a typical day moves the price, how that has calmed year by year, the spread of daily moves, and the biggest days on record." />
+<title>Volatility · BTC Graph</title>
+<link rel="icon" href="assets/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/site.css" />
+<script src="data/btc-data.js"></script>
+<script src="data/btc-daily.js"></script>
+<script src="assets/core.js"></script>
+<script src="assets/charts.js"></script>
+<style>
+  .pos{color:var(--up)} .neg{color:var(--down)}
+  #hist{position:relative}
+  .card h3{font-size:13px;font-weight:500;margin:0 0 4px;color:var(--ink2)}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">Risk · updates daily</p>
+  <h1>How wild is the ride?</h1>
+  <p class="lede">Volatility is how much the price jumps around from one day to the next. This page states it as a <strong>typical daily swing</strong>: if it reads ±3%, an ordinary day moves the price about 3% up or down, and bigger days are less common.</p>
+  <span class="formula">typical daily swing = standard deviation of daily % changes</span>
+
+  <div class="insight"><span class="tag">Takeaway</span><span id="insightText">Loading…</span></div>
+  <section class="tiles" id="tiles" aria-label="Volatility summary"></section>
+
+  <section class="card" aria-label="Typical daily swing over time">
+    <div class="cardhead">
+      <div><h2>The swings are getting smaller</h2>
+      <p class="sub">The thin line reacts quickly (past 30 days). The thick line is the past year, which shows the long slide toward calmer markets.</p></div>
+      <div class="controls"><div class="seg" role="group" aria-label="Time range" id="rangeSeg"></div></div>
+    </div>
+    <div class="legend"><span><i style="background:var(--muted)"></i>Past 30 days</span><span><i style="background:var(--accent);height:3px"></i>Past year</span></div>
+    <div id="volChart"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card" aria-label="Volatility by year">
+      <h2>Year by year</h2>
+      <p class="sub">Typical daily swing in each calendar year, and how many days moved more than 5% either way.</p>
+      <div class="hbars" id="years"></div>
+    </section>
+    <section class="card" aria-label="Spread of daily moves">
+      <div class="cardhead">
+        <div><h2>What a normal day looks like</h2>
+        <p class="sub">Every day sorted by how much the price changed. Tall bars in the middle mean most days are small moves.</p></div>
+        <div class="controls"><div class="seg" role="group" aria-label="Period" id="histSeg"></div></div>
+      </div>
+      <div id="hist"><div id="histSvg"></div><div class="tooltip" id="histTip" role="status"></div></div>
+      <p class="note" id="histNote"></p>
+    </section>
+  </div>
+
+  <section class="card" aria-label="Biggest days">
+    <h2>The biggest days on record</h2>
+    <p class="sub">The ten largest one-day gains and losses since the first halving. Look at the dates: the best and worst days often sit within weeks of each other.</p>
+    <div class="grid2" style="gap:28px">
+      <div><h3>Largest gains</h3><div class="twrap"><table id="ups"></table></div></div>
+      <div><h3>Largest losses</h3><div class="twrap"><table id="downs"></table></div></div>
+    </div>
+  </section>
+
+  <footer class="notes">
+    <h2>Notes</h2>
+    <p>Daily changes compare one UTC daily close with the next, from Nov 28, 2012 through the last completed day. The typical swing is the standard deviation of those changes over the stated window; multiply by about 19 (the square root of 365) for the annualized figure analysts quote. Early-2013 prices come from a single, thinly traded exchange, which exaggerates some of the largest moves.</p>
+  </footer>
+</main>
+<script>
+(function(){
+  var fmtUSD=BTC.fmtUSD, DAY=BTC.DAY, V=null, range=BTC.store("btcgraph.volRange")||"All", histRange="All";
+  var RANGES=[["All",0],["8Y",8],["4Y",4],["2Y",2]];
+  function num(a,b){ return a-b; }
+  function sw(v){ return "±"+v.toFixed(v<10?1:0)+"%"; }
+  function roll(r,w){
+    var out=new Array(r.length), s=0, q=0;
+    for(var i=0;i<r.length;i++){ s+=r[i]; q+=r[i]*r[i]; if(i>=w){ s-=r[i-w]; q-=r[i-w]*r[i-w]; } out[i]=i>=w-1?Math.sqrt(Math.max(0,(q-s*s/w)/(w-1)))*100:null; }
+    return out;
+  }
+  function sd(a){ var n=a.length, m=0, q=0; a.forEach(function(x){ m+=x; }); m/=n; a.forEach(function(x){ q+=(x-m)*(x-m); }); return Math.sqrt(q/(n-1))*100; }
+
+  function compute(S){
+    var t=S.t.slice(1), r=[]; for(var i=1;i<S.p.length;i++) r.push(S.p[i]/S.p[i-1]-1);
+    var v30=roll(r,30), v365=roll(r,365);
+    V={t:t,r:r,p:S.p.slice(1),v30:v30,v365:v365,n:r.length,sorted30:v30.filter(function(v){ return v!=null; }).sort(num)};
+  }
+
+  function summary(){
+    var n=V.n, now=V.v30[n-1], yr=V.v365[n-1], calmer=100-BTC.rankPct(V.sorted30,now);
+    var big=0, top=n-365; for(var i=n-365;i<n;i++){ if(Math.abs(V.r[i])>.05) big++; if(Math.abs(V.r[i])>Math.abs(V.r[top])) top=i; }
+    var years=byYear(), first=years[0], peakYr=years.reduce(function(a,y){ return y.big>a.big?y:a; },years[0]);
+    document.getElementById("insightText").innerHTML="Over the past 30 days a typical day moved bitcoin <b>"+sw(now)+"</b>, calmer than "+Math.round(calmer)+"% of its history. In "+first.y+" a typical day was "+sw(first.sd)+"; over the past year it has been <b>"+sw(yr)+"</b>. The swings shrink as the market grows.";
+    function tile(k,v,s,extra){ return '<div class="tile"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div>'+(extra||"")+'</div>'; }
+    document.getElementById("tiles").innerHTML=
+      tile("Typical daily swing · 30 days",sw(now),"Calmer than "+Math.round(calmer)+"% of all 30-day stretches",'<div class="meter" aria-hidden="true"><i style="left:'+Math.max(2,Math.min(98,100-calmer)).toFixed(1)+'%"></i></div><div class="meterlab"><span>calm</span><span>wild</span></div>')+
+      tile("Typical daily swing · 1 year",sw(yr),"About "+Math.round(yr*Math.sqrt(365))+"% annualized")+
+      tile("Days over 5% · past year",String(big),"Most in one year: "+peakYr.big+" in "+peakYr.y)+
+      tile("Biggest day · past year",BTC.fmtPct(V.r[top]*100,1),BTC.fmtDay(V.t[top])+" · closed "+fmtUSD(V.p[top]));
+  }
+
+  function byYear(){
+    var map={}, out=[];
+    V.r.forEach(function(r,i){ var y=new Date(V.t[i]).getUTCFullYear(); (map[y]=map[y]||[]).push(r); });
+    Object.keys(map).forEach(function(y){ if(map[y].length>=60) out.push({y:+y, sd:sd(map[y]), big:map[y].filter(function(r){ return Math.abs(r)>.05; }).length, n:map[y].length}); });
+    return out;
+  }
+  function yearBars(){
+    var ys=byYear(), mx=Math.max.apply(null,ys.map(function(y){ return y.sd; })), cur=new Date().getUTCFullYear(), html="";
+    ys.forEach(function(y){
+      var c=y.y===cur?" now":"";
+      html+='<span class="l'+c+'">'+y.y+(y.y===cur?" so far":"")+'</span><span class="b'+c+'"><i style="width:'+(y.sd/mx*100).toFixed(1)+'%"></i></span>'+
+        '<span class="v'+c+'">'+sw(y.sd)+' <small>· '+y.big+' big day'+(y.big===1?"":"s")+'</small></span>';
+    });
+    document.getElementById("years").innerHTML=html;
+  }
+
+  /* histogram of daily % changes in 1-point buckets, with open-ended tails at ±10% */
+  function hist(){
+    var box=document.getElementById("histSvg"), W=Math.max(280,box.clientWidth||520), H=Math.round(Math.min(300,Math.max(220,W*.5)));
+    var yrs={"All":0,"4Y":4,"1Y":1}[histRange], i0=yrs?Math.max(0,V.n-Math.round(yrs*365.25)):0, bins=[], tot=V.n-i0;
+    for(var b=0;b<22;b++) bins.push(0);
+    var small=0;
+    for(var i=i0;i<V.n;i++){ var x=V.r[i]*100; bins[Math.max(0,Math.min(21,Math.floor(x)+11))]++; if(Math.abs(x)<2) small++; }
+    var mx=Math.max.apply(null,bins)/tot*100, ML=38, MR=8, MT=10, MB=30, PW=W-ML-MR, PH=H-MT-MB, bw=PW/22;
+    var ticks=BTC.niceTicks(0,mx*1.05,4), top=Math.max(ticks[ticks.length-1],mx);
+    function Y(v){ return MT+(1-v/top)*PH; }
+    var s='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Histogram of bitcoin daily percentage changes">';
+    ticks.forEach(function(g){ s+='<line class="grid" x1="'+ML+'" y1="'+Y(g)+'" x2="'+(ML+PW)+'" y2="'+Y(g)+'"/><text class="tick" x="'+(ML-6)+'" y="'+(Y(g)+4)+'" text-anchor="end">'+g+'%</text>'; });
+    bins.forEach(function(c,k){
+      var v=c/tot*100, lo=k-11;
+      s+='<rect data-k="'+k+'" x="'+(ML+k*bw+1)+'" y="'+Y(v)+'" width="'+Math.max(1,bw-2)+'" height="'+Math.max(c?1.5:0,MT+PH-Y(v))+'" rx="2" fill="'+(lo>=0?"var(--up)":"var(--down)")+'" fill-opacity="'+(Math.abs(lo+.5)<2?.85:.6)+'"/>';
+    });
+    for(var g=-10;g<=10;g+=(W<420?5:2)) s+='<text class="tick" x="'+(ML+(g+11)*bw)+'" y="'+(MT+PH+16)+'" text-anchor="middle">'+(g>0?"+":"")+g+'%</text>';
+    var last=V.r[V.n-1]*100, lx=ML+(Math.max(-10.9,Math.min(10.9,last))+11)*bw;
+    s+='<line x1="'+lx+'" y1="'+MT+'" x2="'+lx+'" y2="'+(MT+PH)+'" stroke="var(--ink)" stroke-dasharray="3 3"/><text class="tick halo" x="'+(lx+(lx>ML+PW-110?-6:6))+'" y="'+(MT+10)+'" text-anchor="'+(lx>ML+PW-110?"end":"start")+'" style="fill:var(--ink)">latest day '+BTC.fmtPct(last,1)+'</text>';
+    s+='</svg>';
+    box.innerHTML=s;
+    var tip=document.getElementById("histTip");
+    box.querySelectorAll("rect").forEach(function(r){
+      r.addEventListener("pointermove",function(e){
+        var k=+r.dataset.k, lo=k-11, lab=k===0?"Fell more than 10%":k===21?"Rose more than 10%":(lo<0?"Fell ":"Rose ")+Math.min(Math.abs(lo),Math.abs(lo+1))+"% to "+Math.max(Math.abs(lo),Math.abs(lo+1))+"%";
+        tip.innerHTML='<h3>'+lab+'</h3><div class="row"><span class="nm">Days</span><span class="vv">'+bins[k].toLocaleString("en-US")+'</span></div><div class="row"><span class="nm">Share of days</span><span class="vv">'+(bins[k]/tot*100).toFixed(1)+'%</span></div>';
+        BTC.placeTip(tip,document.getElementById("hist"),e);
+      });
+      r.addEventListener("pointerleave",function(){ tip.classList.remove("on"); });
+    });
+    document.getElementById("histNote").innerHTML="On <b>"+Math.round(small/tot*100)+"%</b> of these "+tot.toLocaleString("en-US")+" days the price moved less than 2% either way. Moves beyond 10% happened on "+(bins[0]+bins[21])+" days ("+((bins[0]+bins[21])/tot*100).toFixed(1)+"%).";
+  }
+
+  function tables(){
+    var idx=V.r.map(function(_,i){ return i; }).sort(function(a,b){ return V.r[b]-V.r[a]; });
+    function tb(list,c){ return '<thead><tr><th>Day</th><th>Change</th><th>Close</th></tr></thead><tbody>'+list.map(function(i){ return '<tr><td>'+BTC.fmtDay(V.t[i])+'</td><td class="'+c+'">'+BTC.fmtPct(V.r[i]*100,1)+'</td><td>'+fmtUSD(V.p[i],V.p[i]<1000?2:0)+'</td></tr>'; }).join("")+'</tbody>'; }
+    document.getElementById("ups").innerHTML=tb(idx.slice(0,10),"pos");
+    document.getElementById("downs").innerHTML=tb(idx.slice(-10).reverse(),"neg");
+  }
+
+  var ch;
+  function chart(){
+    ch=BTC.chart(document.getElementById("volChart"),function(){
+      var y=RANGES.filter(function(r){ return r[0]===range; })[0][1];
+      return {
+        label:"Line chart of bitcoin's typical daily price swing over the past 30 days and past year",
+        t0:y?V.t[V.n-1]-y*365.25*DAY:V.t[29], halvings:true,
+        y:{min:0, fmt:function(v){ return v?"±"+v+"%":"0%"; }},
+        series:[{name:"Past 30 days", t:V.t, v:V.v30, color:"var(--muted)", width:1.2, opacity:.75, fmt:sw},
+                {name:"Past year", t:V.t, v:V.v365, color:"var(--accent)", width:2.4, fmt:sw, end:sw}],
+        tipExtra:function(t){ var i=BTC.nearest(V.t,t); return '<div class="row"><span class="nm">Price</span><span class="vv">'+fmtUSD(V.p[i])+'</span></div><div class="row"><span class="nm">That day</span><span class="vv chg '+(V.r[i]>=0?"up":"down")+'">'+BTC.fmtPct(V.r[i]*100,1)+'</span></div>'; }
+      };
+    });
+  }
+
+  BTC.daily(function(S){
+    if(!S) return;
+    compute(S); summary(); yearBars(); hist(); tables(); chart();
+    var seg=document.getElementById("rangeSeg");
+    seg.innerHTML=RANGES.map(function(r){ return '<button type="button" data-r="'+r[0]+'" aria-pressed="'+(r[0]===range)+'">'+r[0]+'</button>'; }).join("");
+    seg.addEventListener("click",function(e){ var b=e.target.closest("button"); if(!b) return; range=b.dataset.r; BTC.store("btcgraph.volRange",range); [].forEach.call(seg.children,function(x){ x.setAttribute("aria-pressed",x===b); }); ch.draw(); });
+    var hs=document.getElementById("histSeg");
+    hs.innerHTML=[["All","Since 2012"],["4Y","Last 4 years"],["1Y","Last year"]].map(function(r){ return '<button type="button" data-r="'+r[0]+'" aria-pressed="'+(r[0]===histRange)+'">'+r[1]+'</button>'; }).join("");
+    hs.addEventListener("click",function(e){ var b=e.target.closest("button"); if(!b) return; histRange=b.dataset.r; [].forEach.call(hs.children,function(x){ x.setAttribute("aria-pressed",x===b); }); hist(); });
+    if(window.ResizeObserver){ var lw=0; new ResizeObserver(function(){ var w=document.getElementById("histSvg").clientWidth; if(Math.abs(w-lw)>1){ lw=w; hist(); } }).observe(document.getElementById("hist")); }
+  });
+})();
+</script>
+</body>
+</html>

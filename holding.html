@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="description" content="How often has holding bitcoin paid off? The share of every possible day, week, year and four-year hold that ended in profit, and what missing the best days would have cost." />
+<title>Holding periods · BTC Graph</title>
+<link rel="icon" href="assets/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/site.css" />
+<script src="data/btc-data.js"></script>
+<script src="data/btc-daily.js"></script>
+<script src="assets/core.js"></script>
+<script src="assets/charts.js"></script>
+<style>
+  #odds td,#odds th{padding:9px 8px}
+  #odds tbody tr{cursor:pointer}
+  #odds tr.sel{background:var(--surface2)}
+  #odds tr.sel td:first-child{color:var(--ink);box-shadow:inset 2px 0 0 var(--accent)}
+  #odds .barcell{width:38%;min-width:150px}
+  #odds .bar{display:flex;align-items:center;gap:10px}
+  #odds .bar .t{flex:1;height:14px;background:var(--surface2);border-radius:3px;overflow:hidden}
+  #odds .bar .t i{display:block;height:100%;background:var(--up);border-radius:3px;opacity:.75}
+  #odds tr.sel .bar .t{background:var(--bg)}
+  #odds .bar b{font-weight:500;width:3.4em;text-align:right}
+  #odds .neg{color:var(--down)} #odds .pos{color:var(--up)}
+  @media (max-width:640px){#odds .hide-s{display:none} #odds .barcell{min-width:110px}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">Returns · updates daily</p>
+  <h1>Does patience pay?</h1>
+  <p class="lede">Pick <strong>any day</strong> since the first halving, buy bitcoin at that day's close, and hold. This page checks every possible start day and asks one question: after a week, a year, or four years, were you in profit?</p>
+
+  <div class="insight"><span class="tag">Takeaway</span><span id="insightText">Loading…</span></div>
+  <section class="tiles" id="tiles" aria-label="Holding period summary"></section>
+
+  <section class="card" aria-label="Chance of profit by holding period">
+    <h2>The longer the hold, the better the odds</h2>
+    <p class="sub">Share of all start days that ended in profit, for each holding period. "Typical" is the middle outcome: half did better, half did worse. Select a row to explore it below.</p>
+    <div class="twrap"><table id="odds"></table></div>
+  </section>
+
+  <section class="card" aria-label="Result of every start day">
+    <div class="cardhead">
+      <div><h2 id="exTitle">Every start day, held for 1 year</h2>
+      <p class="sub">Each point is one purchase day. Its height is what the purchase was worth at the end of the hold. Above the 1× line is profit, below it is loss.</p></div>
+      <div class="controls"><div class="seg" role="group" aria-label="Holding period" id="winSeg"></div></div>
+    </div>
+    <div class="legend"><span><i style="background:var(--up)"></i>Ended in profit</span><span><i style="background:var(--down)"></i>Ended at a loss</span><span><i style="background:var(--muted)"></i>Still being held, valued today</span></div>
+    <div id="exChart"></div>
+    <p class="readout" id="exRead">Hover the chart to read any purchase day.</p>
+  </section>
+
+  <section class="card" aria-label="Cost of missing the best days">
+    <div class="cardhead">
+      <div><h2>A handful of days did most of the work</h2>
+      <p class="sub">What $1,000 became if held every day, compared with being out of the market on just the best few days.</p></div>
+      <div class="controls"><div class="seg" role="group" aria-label="Start" id="missSeg"></div></div>
+    </div>
+    <div class="hbars" id="miss"></div>
+    <p class="note" id="missNote"></p>
+  </section>
+
+  <footer class="notes">
+    <h2>Notes</h2>
+    <p>Based on daily closes from Nov 28, 2012 through the last completed day. A "1-year hold" means buying at one close and selling at the close 365 days later; fees and taxes aren't included. A start day only counts once its full holding period has passed, so the newest purchases are missing from the longer rows.</p>
+    <p>A 100% record describes the past. It reflects bitcoin's four-year rhythm so far and is not a promise about future periods.</p>
+  </footer>
+</main>
+<script>
+(function(){
+  var fmtUSD=BTC.fmtUSD, DAY=BTC.DAY, S=null, R=[], sel=BTC.store("btcgraph.hold")||"1 year", missRange="All";
+  var WINS=[["1 day",1,"1D"],["1 week",7,"1W"],["1 month",30,"1M"],["3 months",91,"3M"],["6 months",183,"6M"],["1 year",365,"1Y"],["2 years",730,"2Y"],["3 years",1096,"3Y"],["4 years",1461,"4Y"],["5 years",1826,"5Y"]];
+  function num(a,b){ return a-b; }
+  function ret(r){ return r>=10?BTC.fmtMult(r):BTC.fmtPct((r-1)*100,Math.abs(r-1)<.1?1:0); }
+  function cls(r){ return r>=1?"pos":"neg"; }
+
+  function compute(){
+    var p=S.p, n=p.length;
+    R=WINS.map(function(w){
+      var d=w[1], rs=[], worst=0, best=0;
+      for(var i=0;i+d<n;i++){ var r=p[i+d]/p[i]; rs.push(r); if(r<rs[worst]) worst=i; if(r>rs[best]) best=i; }
+      var sorted=rs.slice().sort(num), wins=0; rs.forEach(function(r){ if(r>1) wins++; });
+      return {name:w[0], short:w[2], d:d, rs:rs, n:rs.length, win:wins/rs.length*100, min:sorted[0], med:BTC.quantile(sorted,.5), max:sorted[sorted.length-1], worstI:worst, bestI:best};
+    }).filter(function(r){ return r.n>200; });
+    if(!R.some(function(r){ return r.name===sel; })) sel="1 year";
+  }
+  function cur(){ return R.filter(function(r){ return r.name===sel; })[0]; }
+
+  function summary(){
+    var day=R[0], never=R.filter(function(r){ return r.win===100; })[0], top=R.reduce(function(a,r){ return r.win>a.win?r:a; },R[0]), y1=R.filter(function(r){ return r.d===365; })[0];
+    var txt="Hold for one day and it's close to a coin flip: <b>"+Math.round(day.win)+"%</b> of days ended higher. ";
+    txt+=never?"Hold for "+never.name+" and <b>every one of "+never.n.toLocaleString("en-US")+" start days ended in profit</b>. The unluckiest still came out "+ret(never.min)+".":
+      "Hold for "+top.name+" and <b>"+top.win.toFixed(1)+"%</b> of "+top.n.toLocaleString("en-US")+" start days ended in profit.";
+    document.getElementById("insightText").innerHTML=txt;
+    function tile(k,v,s){ return '<div class="tile"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>'; }
+    var bd=bigDays();
+    document.getElementById("tiles").innerHTML=
+      tile("Shortest hold that never lost",never?never.name:"None yet",never?"Worst result "+ret(never.min)+" · "+never.n.toLocaleString("en-US")+" start days":"Best record: "+top.name+" at "+top.win.toFixed(1)+"%")+
+      tile("Typical 1-year result",ret(y1.med),Math.round(y1.win)+"% of 1-year holds ended higher")+
+      tile("Worst 1-year hold",ret(y1.min),"Bought "+BTC.fmtDay(S.t[y1.worstI])+" at "+fmtUSD(S.p[y1.worstI]))+
+      tile("Best days near worst days",bd.near+" of 10","of the best days fell within a month of one of the 10 worst");
+  }
+  function bigDays(){
+    var p=S.p, idx=[]; for(var i=1;i<p.length;i++) idx.push(i);
+    var by=idx.slice().sort(function(a,b){ return p[b]/p[b-1]-p[a]/p[a-1]; });
+    var best=by.slice(0,10), worst=by.slice(-10), near=0;
+    best.forEach(function(b){ if(worst.some(function(w){ return Math.abs(w-b)<=30; })) near++; });
+    return {near:near};
+  }
+
+  function table(){
+    var h='<thead><tr><th>Held for</th><th class="barcell">Ended in profit</th><th>Worst</th><th>Typical</th><th>Best</th><th class="hide-s">Start days</th></tr></thead><tbody>';
+    R.forEach(function(r){
+      h+='<tr data-n="'+r.name+'"'+(r.name===sel?' class="sel"':'')+' tabindex="0"><td>'+r.name+'</td>'+
+        '<td class="barcell"><div class="bar"><span class="t"><i style="width:'+r.win.toFixed(1)+'%"></i></span><b>'+(r.win===100?"100":r.win.toFixed(r.win>99?1:0))+'%</b></div></td>'+
+        '<td class="'+cls(r.min)+'">'+ret(r.min)+'</td><td class="'+cls(r.med)+'">'+ret(r.med)+'</td><td class="pos">'+ret(r.max)+'</td><td class="hide-s">'+r.n.toLocaleString("en-US")+'</td></tr>';
+    });
+    document.getElementById("odds").innerHTML=h+'</tbody>';
+  }
+  function pick(name){
+    sel=name; BTC.store("btcgraph.hold",name); table();
+    [].forEach.call(document.getElementById("winSeg").children,function(b){ b.setAttribute("aria-pressed",b.dataset.n===name); });
+    document.getElementById("exTitle").textContent="Every start day, held for "+name;
+    ex.draw(); readDefault();
+  }
+  function readDefault(){
+    var r=cur();
+    document.getElementById("exRead").innerHTML="<strong>"+r.name+":</strong> "+(r.win===100?"all":r.win.toFixed(1)+"% of")+" "+r.n.toLocaleString("en-US")+" start days ended in profit. The best start was "+BTC.fmtDay(S.t[r.bestI])+" ("+ret(r.max)+"), the worst was "+BTC.fmtDay(S.t[r.worstI])+" ("+ret(r.min)+").";
+  }
+
+  var ex;
+  function explorer(){
+    ex=BTC.chart(document.getElementById("exChart"),function(){
+      var r=cur(), n=S.p.length, last=S.p[n-1], tDone=S.t.slice(0,r.n), open={t:[],v:[]};
+      for(var i=r.n-1;i<n-1;i++){ open.t.push(S.t[i]); open.v.push(i<r.n?r.rs[i]:last/S.p[i]); }
+      return {
+        label:"Chart of the result of buying bitcoin on each day and holding for "+r.name,
+        halvings:true, t0:S.t[0], t1:S.t[n-1],
+        y:{scale:"log", fmt:function(v){ return v+"×"; }, include:[.9,1.1]},
+        hlines:[{y:1,label:"1× = break-even"}],
+        series:[{name:"Result", t:tDone, v:r.rs, split:{at:1,above:"var(--up)",below:"var(--down)"}, width:1.6, fmt:ret},
+                {name:"So far", t:open.t, v:open.v, color:"var(--muted)", width:1.4, dash:"3 3", fmt:ret}],
+        tipExtra:function(t){
+          var i=BTC.nearest(S.t,t), done=i<r.n, j=done?i+r.d:n-1;
+          return '<div class="row"><span class="nm">Bought at</span><span class="vv">'+fmtUSD(S.p[i])+'</span></div>'+
+            '<div class="row"><span class="nm">'+(done?"Sold "+BTC.fmtDay(S.t[j]):"Latest close")+'</span><span class="vv">'+fmtUSD(S.p[j])+'</span></div>';
+        },
+        xfmt:function(t){ return "Bought "+BTC.fmtDay(t); },
+        onHover:function(t){
+          var i=BTC.nearest(S.t,t), done=i<r.n, j=done?i+r.d:n-1, x=S.p[j]/S.p[i];
+          document.getElementById("exRead").innerHTML="<strong>Bought "+BTC.fmtDay(S.t[i])+" at "+fmtUSD(S.p[i])+":</strong> "+(done?r.name+" later, on "+BTC.fmtDay(S.t[j])+", it was worth ":"not yet held for "+r.name+". At the latest close it is worth ")+fmtUSD(S.p[j])+", a "+(x>=1?"gain":"loss")+" of "+ret(x).replace(/^[+−-]/,"")+". $1,000 became "+fmtUSD(1000*x)+".";
+        },
+        onLeave:readDefault
+      };
+    });
+  }
+
+  function missing(){
+    var p=S.p, n=p.length, yrs={"All":0,"10Y":10,"5Y":5}[missRange], i0=yrs?Math.max(0,n-1-Math.round(yrs*365.25)):0;
+    var total=p[n-1]/p[i0], rets=[];
+    for(var i=i0+1;i<n;i++) rets.push(p[i]/p[i-1]);
+    rets.sort(function(a,b){ return b-a; });
+    var rows=[[0,"Held every day"],[5,"Missed the 5 best days"],[10,"Missed the 10 best"],[20,"Missed the 20 best"],[50,"Missed the 50 best"]], html="", vals=[];
+    rows.forEach(function(r){ var m=total; for(var k=0;k<r[0];k++) m/=rets[k]; vals.push(m); });
+    rows.forEach(function(r,k){
+      var v=1000*vals[k];
+      html+='<span class="l'+(k?"":" now")+'">'+r[1]+'</span><span class="b'+(k?"":" now")+'"><i style="width:'+(vals[k]/vals[0]*100).toFixed(2)+'%"></i></span>'+
+        '<span class="v'+(k?"":" now")+'">'+(v>=1e5?"$"+BTC.fmtCompact(v):fmtUSD(v))+'</span>';
+    });
+    document.getElementById("miss").innerHTML=html;
+    var days=n-1-i0;
+    document.getElementById("missNote").innerHTML="From "+BTC.fmtDay(S.t[i0])+" to the latest close, $1,000 held throughout became <b>"+(1000*vals[0]>=1e5?"$"+BTC.fmtCompact(1000*vals[0]):fmtUSD(1000*vals[0]))+"</b>. Missing only the 10 best days out of "+days.toLocaleString("en-US")+" would have left "+(1000*vals[2]>=1e5?"$"+BTC.fmtCompact(1000*vals[2]):fmtUSD(1000*vals[2]))+", which is "+Math.round((1-vals[2]/vals[0])*100)+"% less. The best days tend to arrive right next to the worst ones, so stepping aside to dodge a crash usually means missing the rebound too.";
+  }
+
+  BTC.daily(function(S0){
+    if(!S0) return;
+    S=S0; compute(); summary(); table();
+    var ws=document.getElementById("winSeg");
+    ws.innerHTML=R.filter(function(r){ return r.d>=30; }).map(function(r){ return '<button type="button" data-n="'+r.name+'" aria-pressed="'+(r.name===sel)+'">'+r.short+'</button>'; }).join("");
+    ws.addEventListener("click",function(e){ var b=e.target.closest("button"); if(b) pick(b.dataset.n); });
+    var od=document.getElementById("odds");
+    od.addEventListener("click",function(e){ var tr=e.target.closest("tr[data-n]"); if(tr) pick(tr.dataset.n); });
+    od.addEventListener("keydown",function(e){ var tr=e.target.closest("tr[data-n]"); if(tr && (e.key==="Enter"||e.key===" ")){ e.preventDefault(); pick(tr.dataset.n); } });
+    explorer(); document.getElementById("exTitle").textContent="Every start day, held for "+sel; readDefault();
+    var ms=document.getElementById("missSeg");
+    ms.innerHTML=["All","10Y","5Y"].map(function(r){ return '<button type="button" data-r="'+r+'" aria-pressed="'+(r===missRange)+'">'+(r==="All"?"Since 2012":"Last "+r.replace("Y"," years"))+'</button>'; }).join("");
+    ms.addEventListener("click",function(e){ var b=e.target.closest("button"); if(!b) return; missRange=b.dataset.r; [].forEach.call(ms.children,function(x){ x.setAttribute("aria-pressed",x===b); }); missing(); });
+    missing();
+  });
+})();
+</script>
+</body>
+</html>
