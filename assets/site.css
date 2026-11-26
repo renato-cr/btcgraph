@@ -223,3 +223,8 @@ footer.notes strong{color:var(--ink2)}
 .hbars .here.l::after{content:" ← now";color:var(--accent)}
 @media (max-width:520px){.hbars.stack .v small{display:block}.hbars.stack .sep{display:none}.hbars.stack{gap:10px 10px}}
 .note{font-size:12.5px;color:var(--muted);margin:12px 0 0;max-width:52em}
+
+/* price shown before the live feed connects: provisional, fades in when the live price lands */
+#bigPrice,#pillPrice,#kPrice{transition:opacity .35s ease}
+.px-wait #bigPrice,.px-wait #pillPrice,.px-wait #kPrice{opacity:.45}
+@media (prefers-reduced-motion:reduce){#bigPrice,#pillPrice,#kPrice{transition:none}}

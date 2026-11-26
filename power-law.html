@@ -190,7 +190,7 @@
   var last=0;
   BTC.onPrice(function(s){
     livePrice=s.price; tiles();
-    document.getElementById("kPriceS").textContent=s.live?s.src:"Snapshot "+D.latest.date;
+    document.getElementById("kPriceS").textContent=s.live?s.src:s.note;
     if(Date.now()-last>5000){ last=Date.now(); build(); }
   });
   proj();

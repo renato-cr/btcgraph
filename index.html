@@ -142,7 +142,7 @@
     prev=s.price;
     if(s.open24){ var ch=(s.price/s.open24-1)*100, el=document.getElementById("h24"); el.textContent=BTC.fmtPct(ch,2); el.className="chg "+(ch>=0?"up":"down"); }
     document.getElementById("sats").textContent=Math.round(1e8/s.price).toLocaleString("en-US");
-    document.getElementById("srcLine").textContent=s.live?"Live · "+s.src:"Snapshot · "+D.latest.date;
+    document.getElementById("srcLine").textContent=s.live?"Live · "+s.src:s.note;
     tilesFromPrice(s.price);
     if(s.live) stamp();
   });
@@ -414,7 +414,7 @@
   }
   var lastDraw=0;
   BTC.onPrice(function(s){
-    if(!s.live) return;
+    if(!s.live && !s.cached) return;
     livePrice=s.price;
     if(hoverI==null && Date.now()-lastDraw>2000){ lastDraw=Date.now(); draw(); }
   });

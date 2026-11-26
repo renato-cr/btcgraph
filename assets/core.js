@@ -57,12 +57,33 @@
   function ym(d){ return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0"); }
 
   /* ---------- live price ---------- */
-  var listeners=[], state={price:D.latest.usd, open24:null, live:false, src:"snapshot "+D.latest.date};
+  /* Until the live feed connects, start from whichever is newer: the data file's snapshot
+     (taken at the daily update) or the last live price this browser saw. The html element
+     carries .px-wait meanwhile so the price can be shown as provisional. */
+  var listeners=[], state={price:D.latest.usd, open24:null, live:false, cached:false,
+    src:"snapshot "+D.latest.date, note:"Snapshot · "+D.latest.date};
+  (function(){
+    var snapT=Date.parse(D.latest.date+"T00:15:00Z"), c=null;
+    try{ c=JSON.parse(store("btcgraph.lastPrice")||"null"); }catch(e){}
+    if(c && c.p>0 && c.t>snapT && Date.now()-c.t<7*864e5){
+      state.price=c.p; state.open24=c.o||null; state.cached=true;
+      var d=new Date(c.t);
+      state.note="Last seen · "+(Date.now()-c.t<864e5 ? d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})
+        : d.toLocaleDateString("en-US",{month:"short",day:"numeric"}));
+    }
+  })();
+  var root=document.documentElement;
+  root.classList.add("px-wait");
+  setTimeout(function(){ root.classList.remove("px-wait"); },5000);  /* feed unreachable: stop hinting */
   function emit(){ listeners.forEach(function(fn){ try{ fn(state); }catch(e){ console.error(e); } }); }
   function onPrice(fn){ listeners.push(fn); fn(state); }
-  var lastEmit=0, pending=null;
+  var lastEmit=0, pending=null, lastSave=0;
   function setPrice(p,open24,src){
-    state.price=p; if(open24) state.open24=open24; state.live=true; state.src=src;
+    var first=!state.live;
+    state.price=p; if(open24) state.open24=open24; state.live=true; state.cached=false; state.src=src; state.note=src;
+    if(first) root.classList.remove("px-wait");
+    if(Date.now()-lastSave>5000){ lastSave=Date.now(); store("btcgraph.lastPrice",JSON.stringify({p:p,o:state.open24,t:lastSave})); }
+    if(first){ lastEmit=Date.now(); emit(); return; }
     var now=Date.now();
     if(now-lastEmit>1000){ lastEmit=now; emit(); }
     else if(!pending){ pending=setTimeout(function(){ pending=null; lastEmit=Date.now(); emit(); },1000); }
